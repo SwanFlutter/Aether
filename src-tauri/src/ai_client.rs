@@ -131,6 +131,19 @@ fn auth(provider: &Provider, api_key: &str) -> (&'static str, String) {
     match provider.kind {
         ProviderKind::Gemini => ("x-goog-api-key", api_key.to_string()),
         ProviderKind::OpenAi => ("Authorization", format!("Bearer {api_key}")),
+        ProviderKind::Anthropic => ("x-api-key", api_key.to_string()),
+    }
+}
+
+/// هدرهای الحاقیِ ثابتِ این ارائه‌دهنده.
+///
+/// آنتروپیک `anthropic-version` را در **هر** درخواست می‌خواهد و بدون آن ۴۰۰
+/// برمی‌گرداند؛ نسخهٔ تاریخ‌دار همان قراردادِ بیدار‌نبودنِ API است، پس اینجا
+/// ثابت می‌ماند تا یک تغییر بی‌سر‌و‌صدا رفتارِ همهٔ نصب‌ها را عوض نکند.
+fn extra_headers(provider: &Provider) -> &'static [(&'static str, &'static str)] {
+    match provider.kind {
+        ProviderKind::Gemini | ProviderKind::OpenAi => &[],
+        ProviderKind::Anthropic => &[("anthropic-version", "2023-06-01")],
     }
 }
 
@@ -144,6 +157,7 @@ pub fn list_models(provider: &Provider, api_key: &str, socks_port: u16) -> AiRes
     match provider.kind {
         ProviderKind::Gemini => list_gemini(provider, api_key, socks_port),
         ProviderKind::OpenAi => list_openai(provider, api_key, socks_port),
+        ProviderKind::Anthropic => list_anthropic(provider, api_key, socks_port),
     }
 }
 
@@ -314,6 +328,59 @@ fn to_openai_model(item: &Value) -> Option<AiModel> {
     })
 }
 
+/// `GET {base}/models` آنتروپیک.
+///
+/// قالب `{"data":[{id, display_name}]}` همانِ OpenAI است، ولی فهرست آنتروپیک
+/// فقط مدل‌های گفت‌وگو را می‌دهد — پس نه فیلترِ NOT_CHAT لازم است و نه نشانه‌ای
+/// از رایگان بودن وجود دارد (همهٔ مدل‌هایش پولی‌اند؛ «رایگان» ادعایی است که فقط
+/// سرویس می‌تواند بکند، پس false). صفحه‌بندی `after_id` عمداً دنبال نمی‌شود: فهرست آنتروپیک یک‌جا
+/// جا می‌شود و یک حلقه‌ای که برای سرویسی بی‌نیاز است، فقط سطحِ شکست دارد.
+fn list_anthropic(provider: &Provider, api_key: &str, socks_port: u16) -> AiResult<Vec<AiModel>> {
+    let body = call(
+        provider,
+        "GET",
+        &format!("{}/models", provider.base_path),
+        socks_port,
+        api_key,
+        None,
+    )?;
+    let json: Value = serde_json::from_str(&body).map_err(|_| {
+        AiError::new("The provider's reply was not valid JSON.", AiErrorKind::Protocol)
+    })?;
+    let items = json
+        .get("data")
+        .and_then(|d| d.as_array())
+        .ok_or_else(|| {
+            AiError::new(
+                "The provider returned no model list in a form this app understands.",
+                AiErrorKind::Protocol,
+            )
+        })?;
+    let mut out: Vec<AiModel> = Vec::new();
+    for item in items {
+        let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if id.is_empty() || out.iter().any(|m| m.id == id) {
+            continue;
+        }
+        out.push(AiModel {
+            id: id.to_string(),
+            display_name: item
+                .get("display_name")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or(id)
+                .to_string(),
+            description: String::new(),
+            input_token_limit: 0,
+            output_token_limit: 0,
+            chat_capable: true,
+            free: false,
+        });
+    }
+    DiagnosticsLog::i("ai", &format!("models: {} offered by the endpoint", out.len()));
+    Ok(out)
+}
+
 /// یک گفت‌وگو را می‌فرستد و پاسخ مدل را به‌صورت متن ساده برمی‌گرداند.
 ///
 /// * `system` — دستور سیستمی؛ شخصیت برنامه، زبانی که باید در آن پاسخ دهد و
@@ -357,6 +424,17 @@ pub fn generate(
             json_output,
         ),
         ProviderKind::OpenAi => generate_openai(
+            provider,
+            api_key,
+            socks_port,
+            model,
+            system,
+            history,
+            temperature,
+            max_output_tokens,
+            json_output,
+        ),
+        ProviderKind::Anthropic => generate_anthropic(
             provider,
             api_key,
             socks_port,
@@ -614,6 +692,88 @@ fn generate_openai(
     Ok(text)
 }
 
+/// `POST {base}/messages` آنتروپیک.
+///
+/// سه تفاوت با OpenAI و همه در همین تابع حبس شده‌اند:
+///  * `system` عضوِ `messages` نیست؛ فیلدِ سطح-بالای خودش را می‌خواهد و یک
+///    پیامِ `role:"system"` در تاریخچه، ۴۰۰ می‌گیرد.
+///  * `max_tokens` الزامی است — نبودش خطاست، نه پیش‌فرضِ بی‌سقف.
+///  * `response_format` وجود ندارد، پس `json_output` فقط با همان
+///    استخراج‌کنندهٔ سهل‌گیرِ `ai_prompts` از کنارش رد می‌شویم؛ قراردادی که
+///    برای پنل‌های سازگارِ بی‌وفاء نوشته شده بود، دقیقاً همین جا هم به درد
+///    می‌خورد.
+#[allow(clippy::too_many_arguments)]
+fn generate_anthropic(
+    provider: &Provider,
+    api_key: &str,
+    socks_port: u16,
+    model: &str,
+    system: &str,
+    history: &[AiTurn],
+    temperature: f64,
+    max_output_tokens: u32,
+    json_output: bool,
+) -> AiResult<String> {
+    let _ = json_output;
+    let messages: Vec<Value> = history
+        .iter()
+        .map(|turn| {
+            json!({
+                "role": if turn.from_user { "user" } else { "assistant" },
+                "content": turn.text,
+            })
+        })
+        .collect();
+    let mut payload = json!({
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_output_tokens,
+        // آنتروپیک دمای ۰..۱ می‌شناسد؛ مدلِ پیش‌فرضِ برنامه داخل این بازه است
+        // و هر عددِ بزرگ‌تر، کلیدِ پایین‌تر به همان معناست.
+        "temperature": temperature.clamp(0.0, 1.0),
+    });
+    if !system.trim().is_empty() {
+        payload["system"] = json!(system);
+    }
+    let body = call(
+        provider,
+        "POST",
+        &format!("{}/messages", provider.base_path),
+        socks_port,
+        api_key,
+        Some(&payload.to_string()),
+    )?;
+    let json: Value = serde_json::from_str(&body).map_err(|_| {
+        AiError::new("The provider's reply was not valid JSON.", AiErrorKind::Protocol)
+    })?;
+    let text = content_text(json.get("content"));
+    let stop = json
+        .get("stop_reason")
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
+    if text.trim().is_empty() {
+        let kind = match stop {
+            "refusal" => AiErrorKind::Blocked,
+            "max_tokens" => AiErrorKind::Truncated,
+            _ => AiErrorKind::Protocol,
+        };
+        let message = if stop.is_empty() {
+            "The model returned no answer."
+        } else {
+            stop
+        };
+        return Err(AiError::new(message, kind));
+    }
+    if stop == "max_tokens" {
+        DiagnosticsLog::w(
+            "ai",
+            &format!("answer hit max_tokens after {} chars", text.len()),
+        );
+        return Err(AiError::new(text, AiErrorKind::Truncated));
+    }
+    Ok(text)
+}
+
 /// `message.content` در دو قالب دیده شده: رشته، و آرایهٔ بخش‌ها با `text`.
 fn content_text(content: Option<&Value>) -> String {
     match content {
@@ -692,6 +852,7 @@ fn attempt_call(
         socks_port,
         header,
         &value,
+        extra_headers(provider),
         json_body,
         REQUEST_TIMEOUT,
     ) {
@@ -870,8 +1031,25 @@ mod tests {
     }
 
     #[test]
-    fn a_model_row_needs_generate_content_to_be_chat_capable() {
-        let item: Value = serde_json::from_str(
+    fn each_service_gets_its_own_auth_shape() {
+        let mut presets = crate::ai_provider::presets();
+        let gemini = presets.remove(0);
+        let openai = presets.remove(0);
+        let claude = presets.remove(0);
+        assert_eq!(auth(&gemini, "K").0, "x-goog-api-key");
+        assert_eq!(auth(&openai, "K"), ("Authorization", "Bearer K".to_string()));
+        assert_eq!(auth(&claude, "K").0, "x-api-key");
+        // بدون این هدر، آنتروپیک هر درخواستی را ۴۰۰ می‌دهد.
+        assert!(extra_headers(&gemini).is_empty());
+        assert!(extra_headers(&openai).is_empty());
+        assert_eq!(
+            extra_headers(&claude),
+            &[("anthropic-version", "2023-06-01")][..]
+        );
+    }
+
+    #[test]
+    fn a_model_row_needs_generate_content_to_be_chat_capable() {        let item: Value = serde_json::from_str(
             r#"{"name":"models/gemini-3.8-flash","displayName":"Flash","supportedGenerationMethods":["generateContent","countTokens"]}"#,
         )
         .unwrap();

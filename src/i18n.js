@@ -116,8 +116,10 @@ const FA = {
   // --- v12 (۱.۲.۴): دستیار هوش مصنوعی ---
   'Assistant': 'دستیار',
   'AI provider': 'ارائه‌دهندهٔ هوش مصنوعی',
-  'Pick the assistant backend, or add any OpenAI-compatible endpoint of your own.':
-    'بک‌اند دستیار را انتخاب کنید، یا هر endpoint سازگار با <bdi>OpenAI</bdi> که خودتان دارید را اضافه کنید.',
+  'Provider': 'ارائه‌دهنده',
+  'API format': 'قالب API',
+  'OpenAI-compatible': 'سازگار با OpenAI',
+  'Anthropic (Claude)': 'آنتروپیک (کلود)',
   'Provider ID': 'شناسهٔ ارائه‌دهنده',
   'Display name': 'نام نمایشی',
   'Base URL': 'نشانی پایه',
@@ -127,8 +129,10 @@ const FA = {
   'Add OpenAI-compatible provider': 'افزودن ارائه‌دهندهٔ سازگار با OpenAI',
   'Provider ID and Base URL are required.': 'شناسهٔ ارائه‌دهنده و نشانی پایه لازم‌اند.',
   'Provider saved.': 'ارائه‌دهنده ذخیره شد.',
+  'Provider saved. Now add its API key above.': 'ارائه‌دهنده ذخیره شد. حالا کلید API آن را در کادر بالا وارد کنید.',
   'no key': 'بدون کلید',
   'Remove': 'برداشتن',
+  'Remove provider': 'حذف این ارائه‌دهنده',
   'Provider removed.': 'ارائه‌دهنده حذف شد.',
   'The key is stored sealed on this PC with Windows DPAPI and is never written to the log.':
     'کلید روی همین رایانه با <bdi>DPAPI</bdi> ویندوز مهر و ذخیره می‌شود و هرگز در لاگ نوشته نمی‌شود.',

@@ -30,140 +30,57 @@ function activeProvider() {
 
 // ------------------------------------------------------ ارائه‌دهنده
 //
-// جمینای و OpenAI پیش‌فرض‌اند و کاربر می‌تواند هر endpoint سازگارِ OpenAI را
-// با Base URL دلخواه اضافه کند (OpenRouter، پنل خودمیزبان، …). انتخابِ
-// ارائه‌دهنده همهٔ پایینِ صفحه را عوض می‌کند: کلید، مدل‌ها، تست.
+// جمینای، OpenAI و Claude پیش‌فرض‌اند و کاربر می‌تواند هر endpoint سازگار را
+// با Base URL دلخواه اضافه کند (OpenRouter، پنل خودمیزبان، …). کلید API هم
+// **همین‌جا** زندگی می‌کند: کلید مالِ یک ارائه‌دهنده است، و دو کارت جدا برای
+// «ارائه‌دهنده» و «کلید ارائه‌دهنده» روی یک صفحه فقط یعنی کاربر نصف صفحه را
+// بگرد تا جای درست را پیدا کند. انتخاب ارائه‌دهنده همهٔ پایینِ صفحه را عوض
+// می‌کند: کلید، مدل‌ها، تست.
+
+/// قالب‌های کلید که هر سرویس از آن شروع می‌شود — راهنمایِ دیدنیِ فیلد، نه اعتبارسنجی.
+const KEY_PLACEHOLDER = { GEMINI: 'AIza…', OPEN_AI: 'sk-…', ANTHROPIC: 'sk-ant-…' }
+
+// مقدارهای پذیرفتنیِ فرمان `ai_upsert_provider` روی سیم. 'OPEN_AI' شکلِ
+// استانداردِ SCREAMING_SNAKE-case خودِ variant است؛ همان «OPENAI» بود که خطای
+// ناشناخته‌بودنِ variant را می‌ساخت (alias سمت Rust دیگر جلویض را می‌گیرد،
+// ولی رابط باید شکلِ درست را بفرستد).
+const KIND_OPTIONS = [
+  ['OPEN_AI', 'OpenAI-compatible'],
+  ['ANTHROPIC', 'Anthropic (Claude)'],
+]
+
+function selectField(capText, options) {
+  const wrap = document.createElement('label')
+  wrap.className = 'field'
+  const cap = document.createElement('span')
+  cap.className = 'field__label'
+  cap.textContent = t(capText)
+  const sel = document.createElement('select')
+  sel.className = 'select'
+  for (const [value, label] of options) {
+    const opt = document.createElement('option')
+    opt.value = value
+    opt.textContent = t(label)
+    sel.appendChild(opt)
+  }
+  wrap.append(cap, sel)
+  return wrap
+}
 
 function providerSection() {
   const box = section('AI provider')
-  const note = document.createElement('p')
-  note.className = 'ai__note'
-  note.textContent = t('Pick the assistant backend, or add any OpenAI-compatible endpoint of your own.')
-  box.appendChild(note)
 
-  const list = document.createElement('div')
-  list.className = 'ai__models'
-  box.appendChild(list)
+  // ---- انتخابگر ارائه‌دهنده
+  const pickerWrap = selectField('Provider', [])
+  const picker = pickerWrap.querySelector('select')
+  picker.addEventListener('change', () => setProvider(picker.value).catch(() => {}))
+  box.appendChild(pickerWrap)
 
-  // فرم «Add provider» — همان چهار فیلدی که کاربر در اپ مرجع دید: شناسه،
-  // نامِ نمایش، Base URL، و کلید.
-  const form = document.createElement('div')
-  form.className = 'ai__providerform'
-  form.hidden = true
-  const field = (label, placeholder, type = 'text') => {
-    const wrap = document.createElement('label')
-    wrap.className = 'field'
-    const cap = document.createElement('span')
-    cap.className = 'field__label'
-    cap.textContent = t(label)
-    const input = document.createElement('input')
-    input.className = 'input ltr'
-    input.placeholder = placeholder
-    input.type = type
-    input.autocomplete = 'off'
-    if (type === 'password') input.spellcheck = false
-    wrap.append(cap, input)
-    box_inputs.push(input)
-    return wrap
- }
-  const box_inputs = []
-  const fId = field('Provider ID', 'myprovider')
-  const fName = field('Display name', 'My AI Provider')
-  const fUrl = field('Base URL', 'https://api.example.com/v1')
-  const fKey = field('API key', 'API key', 'password')
-  const formHint = document.createElement('p')
-  formHint.className = 'ai__note'
-  formHint.textContent = t('Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.')
-  const saveBtn = document.createElement('button')
-  saveBtn.type = 'button'
-  saveBtn.className = 'btn btn--primary'
-  saveBtn.textContent = t('Save')
-  const cancelBtn = document.createElement('button')
-  cancelBtn.type = 'button'
-  cancelBtn.className = 'btn btn--ghost'
-  cancelBtn.textContent = t('Cancel')
-  form.append(fId, fName, fUrl, fKey, formHint)
-  const actions = document.createElement('div')
-  actions.className = 'ai__keyactions'
-  actions.append(saveBtn, cancelBtn)
-  form.appendChild(actions)
-  box.appendChild(form)
-
-  const addBtn = document.createElement('button')
-  addBtn.type = 'button'
-  addBtn.className = 'btn btn--ghost'
-  addBtn.textContent = t('Add OpenAI-compatible provider')
-  addBtn.addEventListener('click', () => {
-    form.hidden = !form.hidden
-    addBtn.textContent = form.hidden ? t('Add OpenAI-compatible provider') : t('Close')
-  })
-  box.appendChild(addBtn)
-
-  saveBtn.addEventListener('click', async () => {
-    const [id, name, url, key] = box_inputs.map((i) => i.value.trim())
-    if (!id || !url) {
-      formHint.textContent = t('Provider ID and Base URL are required.')
-      return
-    }
-    saveBtn.disabled = true
-    try {
-      await upsertProvider(id, name, 'OPENAI', url)
-      if (key) await setApiKey(key)
-      box_inputs.forEach((i) => { i.value = '' })
-      form.hidden = true
-      toast(t('Provider saved.'))
-      if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels().catch(() => {})
-    } catch (e) {
-      formHint.textContent = String(e)
-    } finally {
-      saveBtn.disabled = false
-    }
-  })
-  cancelBtn.addEventListener('click', () => { form.hidden = true })
-
-  const sync = () => {
-    list.replaceChildren()
-    for (const p of ai.providers) {
-      const row = document.createElement('button')
-      row.type = 'button'
-      row.className = 'ai__model'
-      row.classList.toggle('is-active', p.id === ai.activeProvider)
-      const name = document.createElement('span')
-      name.className = 'ai__modelname ltr'
-      name.textContent = p.displayName
-      row.appendChild(name)
-      const hint = document.createElement('span')
-      hint.className = 'ai__modelmeta'
-      hint.textContent = p.hasKey ? `…${p.keyHint}` : t('no key')
-      row.appendChild(hint)
-      if (!p.builtin) {
-        const del = document.createElement('span')
-        del.className = 'ai__modelmeta'
-        del.textContent = '✕'
-        del.title = t('Remove')
-        del.addEventListener('click', (ev) => {
-          ev.stopPropagation()
-          removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
-        })
-        row.appendChild(del)
-      }
-      row.addEventListener('click', () => setProvider(p.id).catch(() => {}))
-      list.appendChild(row)
-    }
-  }
-  onAiChange(sync, box)
-  sync()
-  return box
-}
-
-// ------------------------------------------------------------ کلید API
-
-function keySection() {
-  const box = section('API key')
-  const note = document.createElement('p')
-  note.className = 'ai__note'
-  note.textContent = t('The key is stored sealed on this PC with Windows DPAPI and is never written to the log.')
-  box.appendChild(note)
+  // ---- کلید API، زیرِ انتخابگرِ همان ارائه‌دهنده
+  const keyNote = document.createElement('p')
+  keyNote.className = 'ai__note'
+  keyNote.textContent = t('The key is stored sealed on this PC with Windows DPAPI and is never written to the log.')
+  box.appendChild(keyNote)
 
   // ۱.۲.۴-p1 — کلاس فیلد `.input` است و نه `field__input`.
   //
@@ -186,8 +103,8 @@ function keySection() {
   row.append(input, save)
   box.appendChild(row)
 
-  // ردیف دوم: نمایش/پنهان و فراموش‌کردن. عمداً زیرِ فیلد و نه کنارش، تا خودِ
-  // فیلد تمام عرض کارت را بگیرد.
+  // ردیف دوم: نمایش/پنهان، فراموش‌کردن و حذفِ ارائه‌دهندهٔ سفارشی. عمداً زیرِ
+  // فیلد و نه کنارش، تا خودِ فیلد تمام عرض کارت را بگیرد.
   const actions = document.createElement('div')
   actions.className = 'ai__keyactions'
   const reveal = document.createElement('button')
@@ -197,7 +114,11 @@ function keySection() {
   forget.type = 'button'
   forget.className = 'btn btn--ghost btn--small btn--danger'
   forget.textContent = t('Forget')
-  actions.append(reveal, forget)
+  const removeBtn = document.createElement('button')
+  removeBtn.type = 'button'
+  removeBtn.className = 'btn btn--ghost btn--small btn--danger'
+  removeBtn.textContent = t('Remove provider')
+  actions.append(reveal, forget, removeBtn)
   box.appendChild(actions)
 
   const paintReveal = () => {
@@ -220,6 +141,7 @@ function keySection() {
   link.rel = 'noreferrer'
   link.textContent = t('Get a free key from Google AI Studio')
   box.appendChild(link)
+
   save.addEventListener('click', async () => {
     const value = input.value.trim()
     if (!value) return
@@ -248,17 +170,121 @@ function keySection() {
     input.value = ''
     toast(t('API key removed'))
   })
+  removeBtn.addEventListener('click', () => {
+    const p = activeProvider()
+    if (!p || p.builtin) return
+    removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
+  })
 
+  // ---- فرم «افزودن ارائه‌دهنده» — شناسه، نامِ نمایش، نوع API، Base URL.
+  //
+  // کلید در این فرم نیست: `ai_upsert_provider` ارائه‌دهندهٔ تازه را **فعال**
+  // می‌کند، پس ذخیره که رد شد، کادر کلیدِ همین کارت دقیقاً به همان سرویسِ تازه
+  // اشاره دارد و کاربر کلید را همان‌جا می‌دهد.
+  const form = document.createElement('div')
+  form.className = 'ai__providerform'
+  form.hidden = true
+  const field = (label, placeholder) => {
+    const wrap = document.createElement('label')
+    wrap.className = 'field'
+    const cap = document.createElement('span')
+    cap.className = 'field__label'
+    cap.textContent = t(label)
+    const el = document.createElement('input')
+    el.className = 'input ltr'
+    el.placeholder = placeholder
+    el.type = 'text'
+    el.autocomplete = 'off'
+    wrap.append(cap, el)
+    box_inputs.push(el)
+    return wrap
+  }
+  const box_inputs = []
+  const fId = field('Provider ID', 'myprovider')
+  const fName = field('Display name', 'My AI Provider')
+  const fKind = selectField('API format', KIND_OPTIONS)
+  const fUrl = field('Base URL', 'https://api.example.com/v1')
+  const formHint = document.createElement('p')
+  formHint.className = 'ai__note'
+  formHint.textContent = t('Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.')
+  const saveBtn = document.createElement('button')
+  saveBtn.type = 'button'
+  saveBtn.className = 'btn btn--primary'
+  saveBtn.textContent = t('Save')
+  const cancelBtn = document.createElement('button')
+  cancelBtn.type = 'button'
+  cancelBtn.className = 'btn btn--ghost'
+  cancelBtn.textContent = t('Cancel')
+  form.append(fId, fName, fKind, fUrl, formHint)
+  const formActions = document.createElement('div')
+  formActions.className = 'ai__keyactions'
+  formActions.append(saveBtn, cancelBtn)
+  form.appendChild(formActions)
+  box.appendChild(form)
+
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'
+  addBtn.className = 'btn btn--ghost'
+  addBtn.textContent = t('Add OpenAI-compatible provider')
+  addBtn.addEventListener('click', () => {
+    form.hidden = !form.hidden
+    addBtn.textContent = form.hidden ? t('Add OpenAI-compatible provider') : t('Close')
+  })
+  box.appendChild(addBtn)
+
+  saveBtn.addEventListener('click', async () => {
+    const [id, name, url] = box_inputs.map((i) => i.value.trim())
+    const kind = fKind.querySelector('select').value
+    if (!id || !url) {
+      formHint.textContent = t('Provider ID and Base URL are required.')
+      return
+    }
+    saveBtn.disabled = true
+    try {
+      await upsertProvider(id, name, kind, url)
+      box_inputs.forEach((i) => { i.value = '' })
+      form.hidden = true
+      addBtn.textContent = t('Add OpenAI-compatible provider')
+      toast(t('Provider saved. Now add its API key above.'))
+      if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels().catch(() => {})
+    } catch (e) {
+      formHint.textContent = String(e)
+    } finally {
+      saveBtn.disabled = false
+    }
+  })
+  cancelBtn.addEventListener('click', () => { form.hidden = true })
+
+  // بازسازی گزینه‌ها فقط وقتی فهرست یا انتخاب عوض شده: sync روی هر رویداد
+  // snapshot اجرا می‌شود و یک <select> که وسط بازبودنِ کاربر نو نوسازی شود،
+  // هم منوی باز را می‌بندد هم تمرکز را می‌دزدد.
+  let pickerSignature = ''
   const sync = () => {
-    const gemini = activeProvider()?.id === 'gemini'
-    input.placeholder = gemini ? 'AIza…' : 'sk-…'
+    const p = activeProvider()
+    const sig = `${ai.activeProvider}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
+    if (sig !== pickerSignature) {
+      pickerSignature = sig
+      picker.replaceChildren()
+      for (const prov of ai.providers) {
+        const opt = document.createElement('option')
+        opt.value = prov.id
+        opt.textContent = prov.hasKey
+          ? prov.displayName
+          : `${prov.displayName} — ${t('no key')}`
+        picker.appendChild(opt)
+      }
+    }
+    picker.value = ai.activeProvider
+
+    input.placeholder = KEY_PLACEHOLDER[p?.kind] ?? 'sk-…'
     // لینک AI Studio فقط برای جمینای معنا دارد؛ برای بقیهٔ ارائه‌دهنده‌ها دکمهٔ
     // «افزودن ارائه‌دهنده» یا پنل خودِ سرویس مرجع است.
-    link.hidden = !gemini
+    link.hidden = p?.kind !== 'GEMINI'
     state.textContent = ai.hasKey
       ? t('A key ending in …{0} is stored.').replace('{0}', ai.keyHint)
       : t('No key stored.')
     forget.hidden = !ai.hasKey
+    removeBtn.hidden = !p || p.builtin
   }
   onAiChange(sync, box)
   sync()
@@ -332,7 +358,7 @@ function modelSection() {
   box.appendChild(controls)
 
   const sync = () => {
-    const gemini = activeProvider()?.id === 'gemini'
+    const gemini = activeProvider()?.kind === 'GEMINI'
     note.textContent = gemini
       ? t('Only fast Flash-class models are offered: they answer on a free key.')
       : t('Models are discovered from the provider itself.')
@@ -530,7 +556,7 @@ export function renderAssistant() {
   error.className = 'ai__error'
   root.appendChild(error)
 
-  root.append(providerSection(), keySection(), testSection(), modelSection(), advisorSection(), chatLink())
+  root.append(providerSection(), testSection(), modelSection(), advisorSection(), chatLink())
 
   const sync = () => {
     const message = gateMessage()

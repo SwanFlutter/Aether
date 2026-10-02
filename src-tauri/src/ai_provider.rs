@@ -25,6 +25,8 @@ use serde::{Deserialize, Serialize};
 pub const GEMINI_ID: &str = "gemini";
 /// شناسهٔ ارائه‌دهندهٔ آمادهٔ OpenAI.
 pub const OPENAI_ID: &str = "openai";
+/// شناسهٔ ارائه‌دهندهٔ آمادهٔ Anthropic (Claude).
+pub const CLAUDE_ID: &str = "claude";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -34,7 +36,15 @@ pub enum ProviderKind {
     Gemini,
     /// هر چیزی که `/models` و `/chat/completions` را مثل OpenAI حرف می‌زند —
     /// خودِ api.openai.com، OpenRouter، و پنل‌های سازگارِ خودمیزبان.
+    ///
+    /// `alias` برای «OPENAI»: SCREAMING_SNAKE_CASE از نامِ variant خودِ
+    /// «OpenAI» مقدار `OPEN_AI` می‌سازد و یک رابطِ فراموش‌کار که یک‌بار
+    /// `OPENAI` بفرستد، با خطای deserialization بی‌معنی برای کاربر برمی‌گشت.
+    #[serde(alias = "OPENAI")]
     OpenAi,
+    /// REST API آنتروپیک: `x-api-key` + `anthropic-version`، مسیر
+    /// `/v1/models` و `/v1/messages`.
+    Anthropic,
 }
 
 /// یک ارائه‌دهندهٔ ثبت‌شده. `host` و `base_path` از `baseUrl` در لحظهٔ
@@ -69,6 +79,14 @@ pub fn presets() -> Vec<Provider> {
             display_name: "OpenAI".to_string(),
             kind: ProviderKind::OpenAi,
             host: "api.openai.com".to_string(),
+            base_path: "/v1".to_string(),
+            builtin: true,
+        },
+        Provider {
+            id: CLAUDE_ID.to_string(),
+            display_name: "Claude".to_string(),
+            kind: ProviderKind::Anthropic,
+            host: "api.anthropic.com".to_string(),
             base_path: "/v1".to_string(),
             builtin: true,
         },
@@ -259,7 +277,17 @@ mod tests {
             build("myp", "My", ProviderKind::OpenAi, "https://a.example").unwrap(),
         ];
         let all = merge(&custom);
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.len(), 4);
         assert_eq!(all.iter().filter(|p| p.id == GEMINI_ID).count(), 1);
+    }
+
+    #[test]
+    fn the_openai_kind_accepts_both_spellings() {
+        let exact: ProviderKind = serde_json::from_str("\"OPEN_AI\"").unwrap();
+        assert_eq!(exact, ProviderKind::OpenAi);
+        let loose: ProviderKind = serde_json::from_str("\"OPENAI\"").unwrap();
+        assert_eq!(loose, ProviderKind::OpenAi);
+        let claude: ProviderKind = serde_json::from_str("\"ANTHROPIC\"").unwrap();
+        assert_eq!(claude, ProviderKind::Anthropic);
     }
 }

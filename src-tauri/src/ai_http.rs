@@ -75,9 +75,14 @@ impl Response {
 ///   گواهی با همین سنجیده می‌شود، پس یک نشانیِ بد اینجا نه در تونل که در
 ///   handshake خفه می‌شود.
 /// * `auth_header`/`auth_value` — سرآیند احراز هویت. جمینای `x-goog-api-key`
-///   می‌خواهد و هر چیزی سازگارِ OpenAI `Authorization: Bearer`; هر دو به‌صورت
+///   می‌خواهد، OpenAI `Authorization: Bearer` و آنتروپیک `x-api-key`; هر سه به‌صورت
 ///   هدر می‌روند و هرگز پارامتر `?key=`: یک خطِ درخواست در جاهای خیلی بیشتری
 ///   از یک هدر لاگ می‌شود.
+/// * `extra_headers` — هدرهای الحاقیِ غیراحراز-هویت، مثل
+///   `anthropic-version: 2023-06-01` که آنتروپیک **بدون آن هر درخواستی را رد
+///   می‌کند**. جدا از سرآیند احراز هویت می‌آیند تا کلاینت برای هر ارائه‌دهندهٔ
+///   تازه‌ای که یک هدر ثابت می‌خواهد باز-amادهٔ تابع نشود.
+#[allow(clippy::too_many_arguments)]
 pub fn request(
     method: &str,
     authority: &str,
@@ -85,6 +90,7 @@ pub fn request(
     socks_port: u16,
     auth_header: &str,
     auth_value: &str,
+    extra_headers: &[(&str, &str)],
     json_body: Option<&str>,
     timeout: Duration,
 ) -> Result<Response> {
@@ -126,6 +132,12 @@ pub fn request(
     head.push_str(": ");
     head.push_str(auth_value);
     head.push_str("\r\n");
+    for (name, value) in extra_headers {
+        head.push_str(name);
+        head.push_str(": ");
+        head.push_str(value);
+        head.push_str("\r\n");
+    }
     head.push_str(concat!(
         "User-Agent: Aether-Windows/",
         env!("CARGO_PKG_VERSION"),

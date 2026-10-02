@@ -205,9 +205,13 @@ const model = (id, free) => ({
   id, displayName: '', description: '', inputTokenLimit: 0, outputTokenLimit: 0,
   chatCapable: true, free,
 })
+// شکلِ سِریالی‌شدهٔ `ProviderView` در `ai_session.rs`: kind روی سیم
+// SCREAMING_SNAKE_CASE است — «OPEN_AI» و نه «OPENAI».
 const PROVIDERS = [
   { id: 'gemini', displayName: 'Gemini', kind: 'GEMINI', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', builtin: true, hasKey: true, keyHint: 'TKEY' },
-  { id: 'myprov', displayName: 'My Provider', kind: 'OPENAI', baseUrl: 'https://api.example.com/v1', builtin: false, hasKey: false, keyHint: '' },
+  { id: 'openai', displayName: 'OpenAI', kind: 'OPEN_AI', baseUrl: 'https://api.openai.com/v1', builtin: true, hasKey: false, keyHint: '' },
+  { id: 'claude', displayName: 'Claude', kind: 'ANTHROPIC', baseUrl: 'https://api.anthropic.com/v1', builtin: true, hasKey: false, keyHint: '' },
+  { id: 'myprov', displayName: 'My Provider', kind: 'OPEN_AI', baseUrl: 'https://api.example.com/v1', builtin: false, hasKey: false, keyHint: '' },
 ]
 applyAiSnapshot({
   ...ai, providers: PROVIDERS, activeProvider: 'gemini', hasKey: true, keyHint: 'TKEY',
@@ -219,22 +223,43 @@ document.getElementById('view').replaceChildren(v2)
 const secByTitle = (title) =>
   [...v2.querySelectorAll('section.card')].find((s) => s.querySelector('.card__title')?.textContent === t(title))
 
-const prow = [...secByTitle('AI provider').querySelectorAll('.ai__model')]
-check(prow.length === 2 && prow[1].querySelector('span[title]'),
-  'هر دو ارائه‌دهنده رندر می‌شوند و فقط غیرپیش‌ساخته دکمهٔ حذف دارد')
-check(prow[0].classList.contains('is-active'), 'ارائه‌دهندهٔ فعال مشخص است')
-prow[1].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+// باکسِ یکپارچه: انتخابگر + کلید + فرم افزودن همه در یک کارت «AI provider»؛
+// کارتِ جداِ «API key» باید رفته باشد (خواستهٔ کاربر: کلید داخل همین باکس).
+const prow = secByTitle('AI provider')
+check(!!prow && !secByTitle('API key'), 'کلید API داخل باکس ارائه‌دهنده است و بخش جدا حذف شده')
+const picker = prow.querySelector('select')
+check(!!picker && picker.options.length === PROVIDERS.length, 'انتخابگر ارائه‌دهنده هر چهار سرویس را دارد')
+check(picker.value === 'gemini', 'ارائه‌دهندهٔ فعال در انتخابگر مشخص است')
+check([...picker.options].some((o) => o.value === 'claude'), 'Claude در انتخابگر هست')
+check([...picker.options].some((o) => o.textContent.includes(t('no key'))),
+  'ارائه‌دهندهٔ بی‌کلید در انتخابگر علامت «بدون کلید» دارد')
+check(prow.contains(prow.querySelector('.ai__keyrow')), 'فیلد کلید داخل همین کارت است')
+
+picker.value = 'myprov'
+picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
 await tick()
 check(invoked.some(([c, a]) => c === 'ai_set_provider' && a.id === 'myprov'),
-  'کلیک روی ارائه‌دهنده، ai_set_provider را می‌فرستد')
+  'تغییر انتخابگر، ai_set_provider را می‌فرستد')
+
+// فرم افزودن هم باید نوع API را درست بفرستد: دراپ‌دان با مقدارهای سیمیِ Rust.
+const formSel = prow.querySelector('.ai__providerform select')
+check(!!formSel && [...formSel.options].map((o) => o.value).join(',') === 'OPEN_AI,ANTHROPIC',
+  'فرم افزودن، نوع API را با مقدارهای درستِ Rust (OPEN_AI / ANTHROPIC) می‌فرستد')
 
 // با ارائه‌دهندهٔ فعالِ سازگار با OpenAI: لینک AI Studio باید برود و
-// placeholder باید sk- شود.
-applyAiSnapshot({ ...ai, activeProvider: 'myprov' })
-const keySec = secByTitle('API key')
-check(keySec.querySelector('.ai__link').hidden, 'لینک AI Studio فقط برای جمینای است')
-check(keySec.querySelector('.ai__keyrow input').placeholder === 'sk-…', 'placeholder برای ارائه‌دهندهٔ OpenAI-سازگار عوض شد')
+// placeholder باید sk- شود؛ حذفِ ارائه‌دهنده فقط برای غیرپیش‌ساخته‌ها دیده می‌شود.
+applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'myprov', hasKey: false, keyHint: '' })
+check(prow.querySelector('.ai__link').hidden, 'لینک AI Studio فقط برای جمینای است')
+check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-…', 'placeholder برای ارائه‌دهندهٔ OpenAI-سازگار عوض شد')
+const removeBtn = [...prow.querySelectorAll('.btn--danger')].find((b) => b.textContent === t('Remove provider'))
+check(!!removeBtn && !removeBtn.hidden, 'دکمهٔ حذف برای ارائه‌دهندهٔ سفارشی دیده می‌شود')
+applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'gemini', hasKey: true, keyHint: 'TKEY' })
+check(removeBtn.hidden, 'دکمهٔ حذف روی ارائه‌دهندهٔ پیش‌ساخته پنهان است')
+applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'claude', hasKey: false, keyHint: '' })
+check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-ant-…', 'placeholder برای Claude قالب sk-ant- می‌گیرد')
 
+applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'myprov', hasKey: false, keyHint: '',
+  models: [model('gpt-4o-mini', false), model('deepseek-r1:free', true)], selectedModel: 'gpt-4o-mini' })
 const msec = secByTitle('Model')
 const freeBtn = [...msec.querySelectorAll('.btn')].find((b) => b.textContent === t('Free only'))
 check(!!freeBtn && !freeBtn.hidden, 'دکمهٔ «فقط رایگان» برای ارائه‌دهندهٔ OpenAI دیده می‌شود')

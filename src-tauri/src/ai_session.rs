@@ -413,7 +413,7 @@ impl AiSession {
         };
         let models = match provider.kind {
             ProviderKind::Gemini => policy::filter(&models),
-            ProviderKind::OpenAi => models,
+            ProviderKind::OpenAi | ProviderKind::Anthropic => models,
         };
         let stored = settings
             .get_string(&Self::model_key(&provider.id))
@@ -426,7 +426,7 @@ impl AiSession {
                     models.first().map(|m| m.id.clone()).unwrap_or_default()
                 }
             }
-            ProviderKind::OpenAi => {
+            ProviderKind::OpenAi | ProviderKind::Anthropic => {
                 if models.iter().any(|m| m.id == stored) {
                     stored
                 } else {
@@ -672,7 +672,9 @@ impl AiSession {
             .unwrap_or(ProviderKind::Gemini);
         let accepted = match provider_kind {
             ProviderKind::Gemini => policy::is_allowed(id),
-            ProviderKind::OpenAi => inner.models.iter().any(|m| m.id == id),
+            ProviderKind::OpenAi | ProviderKind::Anthropic => {
+                inner.models.iter().any(|m| m.id == id)
+            }
         };
         if !accepted {
             return Err(format!(
@@ -681,7 +683,7 @@ impl AiSession {
         }
         let normalised = match provider_kind {
             ProviderKind::Gemini => policy::normalise(id),
-            ProviderKind::OpenAi => id.trim().to_string(),
+            ProviderKind::OpenAi | ProviderKind::Anthropic => id.trim().to_string(),
         };
         let active = inner.active.clone();
         inner.selected_model = normalised.clone();
