@@ -74,14 +74,18 @@ check(input.classList.contains('input'), 'فیلد کلاسِ استایل‌د�
 check(input.classList.contains('ltr'), 'فیلد کلید در فارسی هم چپ‌چین است')
 check(input.type === 'password', 'کلید پیش‌فرض پوشیده است')
 
-const reveal = [...view.querySelectorAll('.ai__keyactions .btn')].find((b) => b.textContent === t('Show'))
+const reveal = [...view.querySelectorAll('.ai__keyrow .btn')].find((b) => b.textContent === t('Show'))
 check(!!reveal, 'دکمهٔ نمایش کلید هست')
 reveal.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
 check(input.type === 'text', 'نمایش/پنهان کار می‌کند')
 reveal.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
 
 input.value = 'AIzaTESTKEY'
-const save = [...view.querySelectorAll('.ai__keyrow .btn')].find((b) => b.textContent === t('Save'))
+// تنها یک Save در کل کارت هست و در ردیف دکمه‌ها نشسته — کلید و ارائه‌دهنده
+// با همان یک دکمه ذخیره می‌شوند (خواستهٔ کاربر: یک روش، نه دو تا).
+const saves = [...view.querySelectorAll('.ai__keyactions .btn')].filter((b) => b.textContent === t('Save'))
+check(saves.length === 1, 'دقیقاً یک دکمهٔ Save در کارت ارائه‌دهنده هست')
+const save = saves[0]
 save.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
 await tick(); await tick()
 const setCall = invoked.find(([c]) => c === 'ai_set_key')
@@ -223,16 +227,19 @@ document.getElementById('view').replaceChildren(v2)
 const secByTitle = (title) =>
   [...v2.querySelectorAll('section.card')].find((s) => s.querySelector('.card__title')?.textContent === t(title))
 
-// باکسِ یکپارچه: انتخابگر + کلید + فرم افزودن همه در یک کارت «AI provider»؛
-// کارتِ جداِ «API key» باید رفته باشد (خواستهٔ کاربر: کلید داخل همین باکس).
+// باکسِ یکپارچه: انتخابگر + فرم + کلید همه در یک کارت «AI provider» با یک
+// Save؛ کارتِ جداِ «API key» باید رفته باشد (خواستهٔ کاربر: یک روش برای کلید).
 const prow = secByTitle('AI provider')
 check(!!prow && !secByTitle('API key'), 'کلید API داخل باکس ارائه‌دهنده است و بخش جدا حذف شده')
 const picker = prow.querySelector('select')
-check(!!picker && picker.options.length === PROVIDERS.length, 'انتخابگر ارائه‌دهنده هر چهار سرویس را دارد')
+check(!!picker && picker.options.length === PROVIDERS.length + 1,
+  'انتخابگر هر چهار سرویس + گزینهٔ «افزودن ارائه‌دهندهٔ تازه» را دارد')
 check(picker.value === 'gemini', 'ارائه‌دهندهٔ فعال در انتخابگر مشخص است')
 check([...picker.options].some((o) => o.value === 'claude'), 'Claude در انتخابگر هست')
 check([...picker.options].some((o) => o.textContent.includes(t('no key'))),
   'ارائه‌دهندهٔ بی‌کلید در انتخابگر علامت «بدون کلید» دارد')
+check([...picker.options].at(-1).textContent === t('Add a new provider…'),
+  'گزینهٔ آخرِ انتخابگر «افزودن ارائه‌دهندهٔ تازه» است')
 check(prow.contains(prow.querySelector('.ai__keyrow')), 'فیلد کلید داخل همین کارت است')
 
 picker.value = 'myprov'
@@ -241,10 +248,28 @@ await tick()
 check(invoked.some(([c, a]) => c === 'ai_set_provider' && a.id === 'myprov'),
   'تغییر انتخابگر، ai_set_provider را می‌فرستد')
 
-// فرم افزودن هم باید نوع API را درست بفرستد: دراپ‌دان با مقدارهای سیمیِ Rust.
+// حالت «تازه بساز»: فیلدهای شناسه/نام/قالب/نشانی باز می‌شوند و کلید هم همان‌جا
+// داده می‌شود — یک Save هر دو را ذخیره می‌کند.
+picker.value = '__add__'
+picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+check(!prow.querySelector('.ai__providerform').hidden, 'با «تازه بساز» فیلدهای ارائه‌دهنده باز می‌شوند')
 const formSel = prow.querySelector('.ai__providerform select')
 check(!!formSel && [...formSel.options].map((o) => o.value).join(',') === 'OPEN_AI,ANTHROPIC',
   'فرم افزودن، نوع API را با مقدارهای درستِ Rust (OPEN_AI / ANTHROPIC) می‌فرستد')
+const [idIn, nameIn, urlIn] = prow.querySelectorAll('.ai__providerform input')
+idIn.value = 'vyce'
+nameIn.value = 'Vyceai'
+urlIn.value = 'https://vyceai.com/v1'
+prow.querySelector('.ai__keyrow input').value = 'sk-TEST2'
+const saveBtn = [...prow.querySelectorAll('.ai__keyactions .btn')].find((b) => b.textContent === t('Save'))
+saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+await tick(); await tick()
+const upCall = invoked.find(([c]) => c === 'ai_upsert_provider')
+check(!!upCall && upCall[1].kind === 'OPEN_AI' && upCall[1].baseUrl === 'https://vyceai.com/v1',
+  'ذخیره، ai_upsert_provider را با kind=OPEN_AI می‌فرستد (باگ OPENAI برگشت‌ناپذیر شد)')
+check(invoked.filter(([c, a]) => c === 'ai_set_key' && a.key === 'sk-TEST2').length === 1,
+  'همان یک کلیک، کلید را هم با ai_set_key ذخیره کرد')
+check(prow.querySelector('.ai__providerform').hidden, 'پس از ذخیره، فرم دوباره پنهان شد')
 
 // با ارائه‌دهندهٔ فعالِ سازگار با OpenAI: لینک AI Studio باید برود و
 // placeholder باید sk- شود؛ حذفِ ارائه‌دهنده فقط برای غیرپیش‌ساخته‌ها دیده می‌شود.

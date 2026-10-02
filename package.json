@@ -1,6 +1,6 @@
 {
   "name": "aether-desktop",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "description": "Aether Desktop - the Windows edition of Aether Mobile",
   "type": "module",

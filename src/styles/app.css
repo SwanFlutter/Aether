@@ -1136,6 +1136,42 @@ html[dir="rtl"] .switch.is-on .switch__knob { transform: translateX(-20px); }
   background: color-mix(in srgb, #ffffff 3%, transparent);
 }
 .ai__providerform .field { width: 100%; }
+/* ---------------------------------------------------------------------------
+   v1.2.6 — تب «تست شبکه». سه کارتِ نتیجه در یک ردیف که روی پنجره‌های کوچک
+   تک‌ستونی می‌شکند، نوار پیشروی فاز، و میله‌های نمونه‌های پینگ.
+   --------------------------------------------------------------------------- */
+.view--nettest { display: flex; flex-direction: column; gap: 14px; }
+.nt__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.nt__stat { display: flex; flex-direction: column; gap: 6px; }
+.nt__value { font-size: 30px; font-weight: 700; color: var(--aether-cyan); }
+.nt__sub { font-size: 11.5px; opacity: .75; }
+.nt__phase { color: var(--aether-blue); }
+.nt__error { color: #ff8fa3; }
+.nt__bar-wrap {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+.nt__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--aether-blue);
+  transition: width .25s ease;
+}
+.nt__samples { display: flex; align-items: flex-end; gap: 4px; height: 44px; }
+.nt__sample {
+  width: 10px;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in srgb, var(--aether-cyan) 65%, transparent);
+}
 /* حالتِ فعالِ دکمهٔ فیلتر «فقط رایگان» — همان بنفشِ انتخابِ مدل. */
 .btn--ghost.is-active { background: color-mix(in srgb, #8b7cff 18%, transparent); color: #d6ccff; }
 .ai__model {

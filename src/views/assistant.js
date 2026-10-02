@@ -31,11 +31,11 @@ function activeProvider() {
 // ------------------------------------------------------ ارائه‌دهنده
 //
 // جمینای، OpenAI و Claude پیش‌فرض‌اند و کاربر می‌تواند هر endpoint سازگار را
-// با Base URL دلخواه اضافه کند (OpenRouter، پنل خودمیزبان، …). کلید API هم
-// **همین‌جا** زندگی می‌کند: کلید مالِ یک ارائه‌دهنده است، و دو کارت جدا برای
-// «ارائه‌دهنده» و «کلید ارائه‌دهنده» روی یک صفحه فقط یعنی کاربر نصف صفحه را
-// بگرد تا جای درست را پیدا کند. انتخاب ارائه‌دهنده همهٔ پایینِ صفحه را عوض
-// می‌کند: کلید، مدل‌ها، تست.
+// با Base URL دلخواه اضافه کند. **یک** روش برای دادن کلید وجود دارد: همان
+// فیلد API key داخل همین کارت، زیرِ انتخابگرِ ارائه‌دهنده. کاربری که ارائه‌دهنده
+// تازه می‌سازد هم شناسه/نام/قالب/نشانی و هم کلید را یک‌جا در همین فرم
+// می‌دهد و با یک دکمه Save ذخیره‌شان می‌کند — دو جای جدا برای یک کلید، همان
+// چیزی بود که کاربر «دوتا» خواند و حذفش خواست.
 
 /// قالب‌های کلید که هر سرویس از آن شروع می‌شود — راهنمایِ دیدنیِ فیلد، نه اعتبارسنجی.
 const KEY_PLACEHOLDER = { GEMINI: 'AIza…', OPEN_AI: 'sk-…', ANTHROPIC: 'sk-ant-…' }
@@ -48,6 +48,10 @@ const KIND_OPTIONS = [
   ['OPEN_AI', 'OpenAI-compatible'],
   ['ANTHROPIC', 'Anthropic (Claude)'],
 ]
+
+// مقدارِ ویژهٔ انتخابگر — «ارائه‌دهندهٔ تازه بساز». یک شناسهٔ دوتیره می‌خورد،
+// چون شناسهٔ ارائه‌دهنده‌ها به `[a-z0-9_-]` محدودند و Rust آن را رد می‌کند.
+const ADD_ID = '__add__'
 
 function selectField(capText, options) {
   const wrap = document.createElement('label')
@@ -70,120 +74,16 @@ function selectField(capText, options) {
 function providerSection() {
   const box = section('AI provider')
 
-  // ---- انتخابگر ارائه‌دهنده
+  // ---- انتخابگر ارائه‌دهنده + گزینهٔ «تازه بساز»
   const pickerWrap = selectField('Provider', [])
   const picker = pickerWrap.querySelector('select')
-  picker.addEventListener('change', () => setProvider(picker.value).catch(() => {}))
   box.appendChild(pickerWrap)
 
-  // ---- کلید API، زیرِ انتخابگرِ همان ارائه‌دهنده
-  const keyNote = document.createElement('p')
-  keyNote.className = 'ai__note'
-  keyNote.textContent = t('The key is stored sealed on this PC with Windows DPAPI and is never written to the log.')
-  box.appendChild(keyNote)
-
-  // ۱.۲.۴-p1 — کلاس فیلد `.input` است و نه `field__input`.
-  //
-  // `field__input` هیچ‌جا در CSS تعریف نشده بود (فقط دو قاعدهٔ flex برایش وجود
-  // داشت)، پس این کادر یک input خامِ ویندوز بود: سفید، ریز و بیگانه کنار دکمهٔ
-  // ذخیره. `.input` همان فیلدی است که کل صفحهٔ تنظیمات استفاده می‌کند.
-  const row = document.createElement('div')
-  row.className = 'ai__keyrow'
-  const input = document.createElement('input')
-  input.type = 'password'
-  input.className = 'input ltr'
-  input.placeholder = 'AIza…'
-  input.autocomplete = 'off'
-  input.spellcheck = false
-  input.setAttribute('aria-label', t('API key'))
-  const save = document.createElement('button')
-  save.type = 'button'
-  save.className = 'btn btn--primary'
-  save.textContent = t('Save')
-  row.append(input, save)
-  box.appendChild(row)
-
-  // ردیف دوم: نمایش/پنهان، فراموش‌کردن و حذفِ ارائه‌دهندهٔ سفارشی. عمداً زیرِ
-  // فیلد و نه کنارش، تا خودِ فیلد تمام عرض کارت را بگیرد.
-  const actions = document.createElement('div')
-  actions.className = 'ai__keyactions'
-  const reveal = document.createElement('button')
-  reveal.type = 'button'
-  reveal.className = 'btn btn--ghost btn--small'
-  const forget = document.createElement('button')
-  forget.type = 'button'
-  forget.className = 'btn btn--ghost btn--small btn--danger'
-  forget.textContent = t('Forget')
-  const removeBtn = document.createElement('button')
-  removeBtn.type = 'button'
-  removeBtn.className = 'btn btn--ghost btn--small btn--danger'
-  removeBtn.textContent = t('Remove provider')
-  actions.append(reveal, forget, removeBtn)
-  box.appendChild(actions)
-
-  const paintReveal = () => {
-    reveal.textContent = input.type === 'password' ? t('Show') : t('Hide')
-  }
-  reveal.addEventListener('click', () => {
-    input.type = input.type === 'password' ? 'text' : 'password'
-    paintReveal()
-  })
-  paintReveal()
-
-  const state = document.createElement('p')
-  state.className = 'ai__keystate'
-  box.appendChild(state)
-
-  const link = document.createElement('a')
-  link.className = 'ai__link'
-  link.href = KEY_URL
-  link.target = '_blank'
-  link.rel = 'noreferrer'
-  link.textContent = t('Get a free key from Google AI Studio')
-  box.appendChild(link)
-
-  save.addEventListener('click', async () => {
-    const value = input.value.trim()
-    if (!value) return
-    save.disabled = true
-    try {
-      await setApiKey(value)
-      // فیلد فوراً پاک می‌شود: کلید ذخیره شده و نگه‌داشتنش روی صفحه فقط یک
-      // اطلاعات محرمانه است که روی نمایشگر مانده.
-      input.value = ''
-      input.type = 'password'
-      paintReveal()
-      // ۱.۲.۴-p1: تأییدِ دیدنی. پیش از این، ذخیرهٔ موفق هیچ بازخوردی نداشت و از
-      // یک کلیکِ بی‌اثر قابل تشخیص نبود.
-      toast(t('API key saved.'))
-      // کشفِ مدل‌ها بلافاصله دنبالش می‌آید، ولی فقط اگر تونل بالا باشد؛ وگرنه
-      // کاربر یک خطای شبکه می‌گیرد برای کاری که خودش نخواسته بود.
-      if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels()
-    } catch (e) {
-      state.textContent = String(e)
-    } finally {
-      save.disabled = false
-    }
-  })
-  forget.addEventListener('click', async () => {
-    await setApiKey('')
-    input.value = ''
-    toast(t('API key removed'))
-  })
-  removeBtn.addEventListener('click', () => {
-    const p = activeProvider()
-    if (!p || p.builtin) return
-    removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
-  })
-
-  // ---- فرم «افزودن ارائه‌دهنده» — شناسه، نامِ نمایش، نوع API، Base URL.
-  //
-  // کلید در این فرم نیست: `ai_upsert_provider` ارائه‌دهندهٔ تازه را **فعال**
-  // می‌کند، پس ذخیره که رد شد، کادر کلیدِ همین کارت دقیقاً به همان سرویسِ تازه
-  // اشاره دارد و کاربر کلید را همان‌جا می‌دهد.
-  const form = document.createElement('div')
-  form.className = 'ai__providerform'
-  form.hidden = true
+  // ---- فیلدهای ساخت ارائه‌دهنده؛ فقط در حالت «تازه بساز» دیده می‌شوند.
+  const details = document.createElement('div')
+  details.className = 'ai__providerform'
+  details.hidden = true
+  const box_inputs = []
   const field = (label, placeholder) => {
     const wrap = document.createElement('label')
     wrap.className = 'field'
@@ -199,7 +99,6 @@ function providerSection() {
     box_inputs.push(el)
     return wrap
   }
-  const box_inputs = []
   const fId = field('Provider ID', 'myprovider')
   const fName = field('Display name', 'My AI Provider')
   const fKind = selectField('API format', KIND_OPTIONS)
@@ -207,53 +106,134 @@ function providerSection() {
   const formHint = document.createElement('p')
   formHint.className = 'ai__note'
   formHint.textContent = t('Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.')
-  const saveBtn = document.createElement('button')
-  saveBtn.type = 'button'
-  saveBtn.className = 'btn btn--primary'
-  saveBtn.textContent = t('Save')
-  const cancelBtn = document.createElement('button')
-  cancelBtn.type = 'button'
-  cancelBtn.className = 'btn btn--ghost'
-  cancelBtn.textContent = t('Cancel')
-  form.append(fId, fName, fKind, fUrl, formHint)
-  const formActions = document.createElement('div')
-  formActions.className = 'ai__keyactions'
-  formActions.append(saveBtn, cancelBtn)
-  form.appendChild(formActions)
-  box.appendChild(form)
+  details.append(fId, fName, fKind, fUrl, formHint)
+  box.appendChild(details)
 
-  const addBtn = document.createElement('button')
-  addBtn.type = 'button'
-  addBtn.className = 'btn btn--ghost'
-  addBtn.textContent = t('Add OpenAI-compatible provider')
-  addBtn.addEventListener('click', () => {
-    form.hidden = !form.hidden
-    addBtn.textContent = form.hidden ? t('Add OpenAI-compatible provider') : t('Close')
+  // ---- کلید API — تنها جای واردکردن کلید در کل برنامه.
+  const keyNote = document.createElement('p')
+  keyNote.className = 'ai__note'
+  keyNote.textContent = t('The key is stored sealed on this PC with Windows DPAPI and is never written to the log.')
+  box.appendChild(keyNote)
+
+  // ۱.۲.۴-p1 — کلاس فیلد `.input` است و نه `field__input` (رجوع به CSS:
+  // `field__input` هیچ‌وقت تعریف نداشت و فیلد یک input خامِ ویندوز می‌شد).
+  const row = document.createElement('div')
+  row.className = 'ai__keyrow'
+  const input = document.createElement('input')
+  input.type = 'password'
+  input.className = 'input ltr'
+  input.placeholder = 'AIza…'
+  input.autocomplete = 'off'
+  input.spellcheck = false
+  input.setAttribute('aria-label', t('API key'))
+  const reveal = document.createElement('button')
+  reveal.type = 'button'
+  reveal.className = 'btn btn--ghost btn--small'
+  row.append(input, reveal)
+  box.appendChild(row)
+
+  const paintReveal = () => {
+    reveal.textContent = input.type === 'password' ? t('Show') : t('Hide')
+  }
+  reveal.addEventListener('click', () => {
+    input.type = input.type === 'password' ? 'text' : 'password'
+    paintReveal()
   })
-  box.appendChild(addBtn)
+  paintReveal()
 
-  saveBtn.addEventListener('click', async () => {
-    const [id, name, url] = box_inputs.map((i) => i.value.trim())
-    const kind = fKind.querySelector('select').value
-    if (!id || !url) {
-      formHint.textContent = t('Provider ID and Base URL are required.')
+  // یک دکمه Save برای کل کارت: ارائه‌دهندهٔ تازه + کلیدش با هم ذخیره می‌شوند،
+  // و روی ارائه‌دهندهٔ آماده فقط همان کلید نوشته می‌شود.
+  const actions = document.createElement('div')
+  actions.className = 'ai__keyactions'
+  const save = document.createElement('button')
+  save.type = 'button'
+  save.className = 'btn btn--primary'
+  save.textContent = t('Save')
+  const forget = document.createElement('button')
+  forget.type = 'button'
+  forget.className = 'btn btn--ghost btn--small btn--danger'
+  forget.textContent = t('Forget')
+  const removeBtn = document.createElement('button')
+  removeBtn.type = 'button'
+  removeBtn.className = 'btn btn--ghost btn--small btn--danger'
+  removeBtn.textContent = t('Remove provider')
+  actions.append(save, forget, removeBtn)
+  box.appendChild(actions)
+
+  const state = document.createElement('p')
+  state.className = 'ai__keystate'
+  box.appendChild(state)
+
+  const link = document.createElement('a')
+  link.className = 'ai__link'
+  link.href = KEY_URL
+  link.target = '_blank'
+  link.rel = 'noreferrer'
+  link.textContent = t('Get a free key from Google AI Studio')
+  box.appendChild(link)
+
+  let adding = false
+
+  picker.addEventListener('change', () => {
+    if (picker.value === ADD_ID) {
+      adding = true
+      details.hidden = false
       return
     }
-    saveBtn.disabled = true
+    adding = false
+    details.hidden = true
+    setProvider(picker.value).catch(() => {})
+  })
+
+  save.addEventListener('click', async () => {
+    const key = input.value.trim()
+    save.disabled = true
     try {
-      await upsertProvider(id, name, kind, url)
-      box_inputs.forEach((i) => { i.value = '' })
-      form.hidden = true
-      addBtn.textContent = t('Add OpenAI-compatible provider')
-      toast(t('Provider saved. Now add its API key above.'))
-      if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels().catch(() => {})
+      if (adding) {
+        const [id, name, url] = box_inputs.map((i) => i.value.trim())
+        const kind = fKind.querySelector('select').value
+        if (!id || !url) {
+          formHint.textContent = t('Provider ID and Base URL are required.')
+          return
+        }
+        await upsertProvider(id, name, kind, url)
+        box_inputs.forEach((i) => { i.value = '' })
+        adding = false
+        details.hidden = true
+        toast(t('Provider saved.'))
+      }
+      if (key) {
+        await setApiKey(key)
+        // فیلد فوراً پاک می‌شود: کلید ذخیره شده و نگه‌داشتنش روی صفحه فقط یک
+        // اطلاعات محرمانه است که روی نمایشگر مانده.
+        input.value = ''
+        input.type = 'password'
+        paintReveal()
+        // ۱.۲.۴-p1: تأییدِ دیدنی. پیش از این، ذخیرهٔ موفق هیچ بازخوردی نداشت.
+        toast(t('API key saved.'))
+      } else if (!adding) {
+        state.textContent = t('No key typed — nothing was changed.')
+        return
+      }
+      // کشفِ مدل‌ها بلافاصله دنبالش می‌آید، ولی فقط اگر تونل بالا باشد؛ وگرنه
+      // کاربر یک خطای شبکه می‌گیرد برای کاری که خودش نخواسته بود.
+      if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels()
     } catch (e) {
-      formHint.textContent = String(e)
+      (adding ? formHint : state).textContent = String(e)
     } finally {
-      saveBtn.disabled = false
+      save.disabled = false
     }
   })
-  cancelBtn.addEventListener('click', () => { form.hidden = true })
+  forget.addEventListener('click', async () => {
+    await setApiKey('')
+    input.value = ''
+    toast(t('API key removed'))
+  })
+  removeBtn.addEventListener('click', () => {
+    const p = activeProvider()
+    if (!p || p.builtin) return
+    removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
+  })
 
   // بازسازی گزینه‌ها فقط وقتی فهرست یا انتخاب عوض شده: sync روی هر رویداد
   // snapshot اجرا می‌شود و یک <select> که وسط بازبودنِ کاربر نو نوسازی شود،
@@ -261,7 +241,7 @@ function providerSection() {
   let pickerSignature = ''
   const sync = () => {
     const p = activeProvider()
-    const sig = `${ai.activeProvider}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
+    const sig = `${ai.activeProvider}|${adding ? ADD_ID : ''}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
     if (sig !== pickerSignature) {
       pickerSignature = sig
       picker.replaceChildren()
@@ -273,18 +253,23 @@ function providerSection() {
           : `${prov.displayName} — ${t('no key')}`
         picker.appendChild(opt)
       }
+      const add = document.createElement('option')
+      add.value = ADD_ID
+      add.textContent = t('Add a new provider…')
+      picker.appendChild(add)
     }
-    picker.value = ai.activeProvider
+    picker.value = adding ? ADD_ID : ai.activeProvider
+    details.hidden = !adding
 
     input.placeholder = KEY_PLACEHOLDER[p?.kind] ?? 'sk-…'
-    // لینک AI Studio فقط برای جمینای معنا دارد؛ برای بقیهٔ ارائه‌دهنده‌ها دکمهٔ
-    // «افزودن ارائه‌دهنده» یا پنل خودِ سرویس مرجع است.
+    // لینک AI Studio فقط برای جمینای معنا دارد؛ برای بقیهٔ ارائه‌دهنده‌ها پنل
+    // خودِ سرویس مرجع است.
     link.hidden = p?.kind !== 'GEMINI'
     state.textContent = ai.hasKey
       ? t('A key ending in …{0} is stored.').replace('{0}', ai.keyHint)
       : t('No key stored.')
-    forget.hidden = !ai.hasKey
-    removeBtn.hidden = !p || p.builtin
+    forget.hidden = !ai.hasKey || adding
+    removeBtn.hidden = !p || p.builtin || adding
   }
   onAiChange(sync, box)
   sync()

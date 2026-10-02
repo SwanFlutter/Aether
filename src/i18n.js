@@ -126,10 +126,10 @@ const FA = {
   'API key': 'کلید API',
   'Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.':
     'حروف کوچک، عدد، خط تیره یا زیرخط. نشانی باید با <bdi>https://</bdi> شروع شود. اگر احراز هویت را از راه هدرها مدیریت می‌کنید، کلید اختیاری است.',
-  'Add OpenAI-compatible provider': 'افزودن ارائه‌دهندهٔ سازگار با OpenAI',
+  'Add a new provider…': 'افزودن ارائه‌دهندهٔ تازه…',
   'Provider ID and Base URL are required.': 'شناسهٔ ارائه‌دهنده و نشانی پایه لازم‌اند.',
   'Provider saved.': 'ارائه‌دهنده ذخیره شد.',
-  'Provider saved. Now add its API key above.': 'ارائه‌دهنده ذخیره شد. حالا کلید API آن را در کادر بالا وارد کنید.',
+  'No key typed — nothing was changed.': 'کلیدی نوشته نشده بود؛ چیزی عوض نشد.',
   'no key': 'بدون کلید',
   'Remove': 'برداشتن',
   'Remove provider': 'حذف این ارائه‌دهنده',
@@ -234,6 +234,24 @@ const FA = {
   'Latency': 'تأخیر',
   'Download': 'دانلود',
   'Upload': 'آپلود',
+
+  // --- v1.2.6: تب «تست شبکه» ---
+  'Network test': 'تست شبکه',
+  'Ping': 'پینگ',
+  'Phase': 'مرحله',
+  'Mbps': 'مگابیت بر ثانیه',
+  'Run the test': 'اجرای تست',
+  'Ping, download and upload are measured through the tunnel — the same path your real traffic takes.':
+    'پینگ، دانلود و آپلود از مسیر تونل سنجیده می‌شوند — همان مسیری که ترافیک واقعی شما می‌رود.',
+  'Jitter is the wobble between samples — high jitter hurts calls and games even when the average ping is fine.':
+    'ژیتر یعنی نوسان بین نمونه‌ها — حتی وقتی میانگین پینگ خوب است، ژیتر بالا تماس و بازی را خراب می‌کند.',
+  'min {0}, avg {1}, max {2}, jitter {3} ms': 'کمینه {0}، میانگین {1}، بیشینه {2}، ژیتر {3} میلی‌ثانیه',
+  'Connect the tunnel first — the test measures the path through it.':
+    'اول تونل را وصل کنید — تست همان مسیر تونل را می‌سنجد.',
+  'A network test is already running.': 'هم‌اکنون یک تست شبکه در حال اجراست.',
+  'Could not start the test thread.': 'رشتهٔ تست راه‌اندازی نشد.',
+  'No target answered through the tunnel. Is the connection up?':
+    'هیچ مقصدی از مسیر تونل جواب نداد. اتصال برقرار است؟',
 
   // --- ۱.۲.۴: کارت اتصال (پورت از ConnectionCard.kt) ---
   'Total': 'مجموع',

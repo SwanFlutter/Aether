@@ -37,6 +37,7 @@ mod geoip;
 mod budgets;
 mod leakguard;
 mod log;
+mod nettest;
 mod ping;
 mod probe;
 mod profile;
@@ -252,6 +253,31 @@ fn run_self_test() {
 fn run_diagnostics(app: State<'_, AppState>) -> diagnostics::Report {
     let profile = app.controller.lock().unwrap().profile();
     diagnostics::run(&profile)
+}
+
+/// تب «تست شبکه» — شروع یک پینگ + دانلود + آپلود کامل از مسیر تونل.
+///
+/// همه‌چیز روی همان SOCKS5 محلیِ خودِ تونل سوار می‌شود (رجوع به
+/// `nettest::` برای چرا) و بی‌اتصال شروع نمی‌شود: عددی که روی شبکهٔ اپراتور
+/// گرفته شود، دقیقاً همان عددی است که کاربر *نمی‌خواهد* بداند.
+#[tauri::command]
+fn net_test_start(handle: AppHandle, app: State<'_, AppState>) -> Result<(), String> {
+    if app.latest.lock().state != state::ConnectionState::Connected {
+        return Err(
+            "Connect the tunnel first — the test measures the path through it.".to_string(),
+        );
+    }
+    nettest::start(move |view| {
+        let _ = handle.emit("aether://nettest", view);
+    })
+}
+
+/// وضعیت لحظه‌ایِ تست — همان چیزی که `aether://nettest` می‌برد، برای اینکه
+/// رابط با یک `get_net_test` روی صفحه‌آمدن، نتیجهٔ کهنهٔ اجرای قبلی را هم
+/// ببیند و نه فقط رخداد‌های بعد از خودش را.
+#[tauri::command]
+fn get_net_test() -> nettest::NetTestView {
+    nettest::snapshot()
 }
 
 /// v1.2.0 — دکمهٔ «آزمایش نشتی WebRTC» در پنل عیب‌یابی.
@@ -888,6 +914,8 @@ fn main() {
             get_checks,
             run_self_test,
             run_diagnostics,
+            net_test_start,
+            get_net_test,
             webrtc_leak_test,
             about_info,
             core_caps,
