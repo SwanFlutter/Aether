@@ -94,14 +94,19 @@ jobs:
       - name: Stage payload
         run: pwsh -NoProfile scripts/stage-payload.ps1 -Target ${{ matrix.rust }} -Arch ${{ matrix.arch }}
 
-      - name: Inno Setup
-        uses: MinhaoWang/iscc@v0.9.0
+      # Inno Setup 6 از منبعِ رسمی (releaseٔ jrsoftware/issrc روی GitHub)؛
+      # نسخهٔ پین‌شده تا بیلد با گذشتِ زمان قابل‌بازتولید بماند.
+      - name: Install Inno Setup 6
+        run: |
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile innosetup-setup.exe -UseBasicParsing
+          Start-Process -FilePath .\innosetup-setup.exe -ArgumentList '/silent', '/suppressmsgboxes', '/norestart' -Wait
+          if (-not (Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) { throw 'ISCC.exe was not installed' }
 
       - name: Compile installer
         run: |
           $ver = ((Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version)
-          iscc /DMyyAppVersion="$ver" /DMyArch="${{ matrix.arch }}" /DPayloadDir="dist\payload-${{ matrix.arch }}" /DOutputDir="dist" installer\aether.iss
-          if ($LASTEXITCODE -ne 0) { throw 'iscc failed' }
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DMyyAppVersion=$ver" "/DMyArch=${{ matrix.arch }}" "/DPayloadDir=dist\payload-${{ matrix.arch }}" "/DOutputDir=dist" installer\aether.iss
+          if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
       - name: Build portable
         run: |
