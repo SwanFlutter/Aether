@@ -7,12 +7,11 @@
 //  است: بی‌کلید مدلی نیست، بی‌مدل مشاور و چتی نیست. صفحه‌ای که هر چهار را همیشه
 //  نشان بدهد، سه بخشِ مرده به کاربرِ تازه نشان می‌دهد.
 
-import { ai, onAiChange, gateMessage, probeSummary, setApiKey, selectModel, refreshModels, testKey, runAdvisor, dismissAdvisor, setProvider, upsertProvider, removeProvider } from '../ai.js'
+import { ai, onAiChange, gateMessage, probeSummary, setApiKey, selectModel, refreshModels, testKey, runAdvisor, dismissAdvisor, setProvider } from '../ai.js'
 import { goToTab } from '../ui/nav.js'
-import { t } from '../i18n.js'
+import { t, getLang } from '../i18n.js'
 import { toast } from '../ui/toast.js'
-
-const KEY_URL = 'https://aistudio.google.com/apikey'
+import { invoke } from '@tauri-apps/api/core'
 
 function section(title) {
   const box = document.createElement('section')
@@ -44,14 +43,9 @@ const KEY_PLACEHOLDER = { GEMINI: 'AIza…', OPEN_AI: 'sk-…', ANTHROPIC: 'sk-a
 // استانداردِ SCREAMING_SNAKE-case خودِ variant است؛ همان «OPENAI» بود که خطای
 // ناشناخته‌بودنِ variant را می‌ساخت (alias سمت Rust دیگر جلویض را می‌گیرد،
 // ولی رابط باید شکلِ درست را بفرستد).
-const KIND_OPTIONS = [
-  ['OPEN_AI', 'OpenAI-compatible'],
-  ['ANTHROPIC', 'Anthropic (Claude)'],
-]
 
-// مقدارِ ویژهٔ انتخابگر — «ارائه‌دهندهٔ تازه بساز». یک شناسهٔ دوتیره می‌خورد،
-// چون شناسهٔ ارائه‌دهنده‌ها به `[a-z0-9_-]` محدودند و Rust آن را رد می‌کند.
-const ADD_ID = '__add__'
+
+
 
 function selectField(capText, options) {
   const wrap = document.createElement('label')
@@ -72,51 +66,19 @@ function selectField(capText, options) {
 }
 
 function providerSection() {
+  // طبق تصویر 256.PNG: فقط یک باکس دورِ آبی برای اتصال API — بقیه حذف.
   const box = section('AI provider')
+  box.classList.add('ai__providerbox')
 
-  // ---- انتخابگر ارائه‌دهنده + گزینهٔ «تازه بساز»
   const pickerWrap = selectField('Provider', [])
   const picker = pickerWrap.querySelector('select')
   box.appendChild(pickerWrap)
 
-  // ---- فیلدهای ساخت ارائه‌دهنده؛ فقط در حالت «تازه بساز» دیده می‌شوند.
-  const details = document.createElement('div')
-  details.className = 'ai__providerform'
-  details.hidden = true
-  const box_inputs = []
-  const field = (label, placeholder) => {
-    const wrap = document.createElement('label')
-    wrap.className = 'field'
-    const cap = document.createElement('span')
-    cap.className = 'field__label'
-    cap.textContent = t(label)
-    const el = document.createElement('input')
-    el.className = 'input ltr'
-    el.placeholder = placeholder
-    el.type = 'text'
-    el.autocomplete = 'off'
-    wrap.append(cap, el)
-    box_inputs.push(el)
-    return wrap
-  }
-  const fId = field('Provider ID', 'myprovider')
-  const fName = field('Display name', 'My AI Provider')
-  const fKind = selectField('API format', KIND_OPTIONS)
-  const fUrl = field('Base URL', 'https://api.example.com/v1')
-  const formHint = document.createElement('p')
-  formHint.className = 'ai__note'
-  formHint.textContent = t('Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.')
-  details.append(fId, fName, fKind, fUrl, formHint)
-  box.appendChild(details)
-
-  // ---- کلید API — تنها جای واردکردن کلید در کل برنامه.
   const keyNote = document.createElement('p')
   keyNote.className = 'ai__note'
   keyNote.textContent = t('The key is stored sealed on this PC with Windows DPAPI and is never written to the log.')
   box.appendChild(keyNote)
 
-  // ۱.۲.۴-p1 — کلاس فیلد `.input` است و نه `field__input` (رجوع به CSS:
-  // `field__input` هیچ‌وقت تعریف نداشت و فیلد یک input خامِ ویندوز می‌شد).
   const row = document.createElement('div')
   row.className = 'ai__keyrow'
   const input = document.createElement('input')
@@ -141,8 +103,6 @@ function providerSection() {
   })
   paintReveal()
 
-  // یک دکمه Save برای کل کارت: ارائه‌دهندهٔ تازه + کلیدش با هم ذخیره می‌شوند،
-  // و روی ارائه‌دهندهٔ آماده فقط همان کلید نوشته می‌شود.
   const actions = document.createElement('div')
   actions.className = 'ai__keyactions'
   const save = document.createElement('button')
@@ -153,35 +113,38 @@ function providerSection() {
   forget.type = 'button'
   forget.className = 'btn btn--ghost btn--small btn--danger'
   forget.textContent = t('Forget')
-  const removeBtn = document.createElement('button')
-  removeBtn.type = 'button'
-  removeBtn.className = 'btn btn--ghost btn--small btn--danger'
-  removeBtn.textContent = t('Remove provider')
-  actions.append(save, forget, removeBtn)
+  actions.append(save, forget)
   box.appendChild(actions)
 
   const state = document.createElement('p')
   state.className = 'ai__keystate'
   box.appendChild(state)
 
-  const link = document.createElement('a')
-  link.className = 'ai__link'
-  link.href = KEY_URL
-  link.target = '_blank'
-  link.rel = 'noreferrer'
-  link.textContent = t('Get a free key from Google AI Studio')
-  box.appendChild(link)
+  const linkGemini = document.createElement('a')
+  linkGemini.className = 'ai__link'
+  linkGemini.href = 'https://aistudio.google.com/apikey'
+  linkGemini.target = '_blank'
+  linkGemini.rel = 'noreferrer'
+  linkGemini.textContent = t('Get a free key from Google AI Studio')
+  box.appendChild(linkGemini)
 
-  let adding = false
+  const linkClaude = document.createElement('a')
+  linkClaude.className = 'ai__link'
+  linkClaude.href = 'https://console.anthropic.com/settings/keys'
+  linkClaude.target = '_blank'
+  linkClaude.rel = 'noreferrer'
+  linkClaude.textContent = t('Get a key from Anthropic Console')
+  box.appendChild(linkClaude)
+
+  const linkOpenAI = document.createElement('a')
+  linkOpenAI.className = 'ai__link'
+  linkOpenAI.href = 'https://platform.openai.com/api-keys'
+  linkOpenAI.target = '_blank'
+  linkOpenAI.rel = 'noreferrer'
+  linkOpenAI.textContent = t('Get a key from OpenAI Platform')
+  box.appendChild(linkOpenAI)
 
   picker.addEventListener('change', () => {
-    if (picker.value === ADD_ID) {
-      adding = true
-      details.hidden = false
-      return
-    }
-    adding = false
-    details.hidden = true
     setProvider(picker.value).catch(() => {})
   })
 
@@ -189,37 +152,18 @@ function providerSection() {
     const key = input.value.trim()
     save.disabled = true
     try {
-      if (adding) {
-        const [id, name, url] = box_inputs.map((i) => i.value.trim())
-        const kind = fKind.querySelector('select').value
-        if (!id || !url) {
-          formHint.textContent = t('Provider ID and Base URL are required.')
-          return
-        }
-        await upsertProvider(id, name, kind, url)
-        box_inputs.forEach((i) => { i.value = '' })
-        adding = false
-        details.hidden = true
-        toast(t('Provider saved.'))
-      }
       if (key) {
         await setApiKey(key)
-        // فیلد فوراً پاک می‌شود: کلید ذخیره شده و نگه‌داشتنش روی صفحه فقط یک
-        // اطلاعات محرمانه است که روی نمایشگر مانده.
         input.value = ''
         input.type = 'password'
         paintReveal()
-        // ۱.۲.۴-p1: تأییدِ دیدنی. پیش از این، ذخیرهٔ موفق هیچ بازخوردی نداشت.
         toast(t('API key saved.'))
-      } else if (!adding) {
+      } else {
         state.textContent = t('No key typed — nothing was changed.')
-        return
       }
-      // کشفِ مدل‌ها بلافاصله دنبالش می‌آید، ولی فقط اگر تونل بالا باشد؛ وگرنه
-      // کاربر یک خطای شبکه می‌گیرد برای کاری که خودش نخواسته بود.
       if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels()
     } catch (e) {
-      (adding ? formHint : state).textContent = String(e)
+      state.textContent = String(e)
     } finally {
       save.disabled = false
     }
@@ -229,47 +173,28 @@ function providerSection() {
     input.value = ''
     toast(t('API key removed'))
   })
-  removeBtn.addEventListener('click', () => {
-    const p = activeProvider()
-    if (!p || p.builtin) return
-    removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
-  })
 
-  // بازسازی گزینه‌ها فقط وقتی فهرست یا انتخاب عوض شده: sync روی هر رویداد
-  // snapshot اجرا می‌شود و یک <select> که وسط بازبودنِ کاربر نو نوسازی شود،
-  // هم منوی باز را می‌بندد هم تمرکز را می‌دزدد.
   let pickerSignature = ''
   const sync = () => {
     const p = activeProvider()
-    const sig = `${ai.activeProvider}|${adding ? ADD_ID : ''}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
+    const sig = `${ai.activeProvider}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
     if (sig !== pickerSignature) {
       pickerSignature = sig
       picker.replaceChildren()
       for (const prov of ai.providers) {
         const opt = document.createElement('option')
         opt.value = prov.id
-        opt.textContent = prov.hasKey
-          ? prov.displayName
-          : `${prov.displayName} — ${t('no key')}`
+        opt.textContent = prov.hasKey ? prov.displayName : `${prov.displayName} — ${t('no key')}`
         picker.appendChild(opt)
       }
-      const add = document.createElement('option')
-      add.value = ADD_ID
-      add.textContent = t('Add a new provider…')
-      picker.appendChild(add)
     }
-    picker.value = adding ? ADD_ID : ai.activeProvider
-    details.hidden = !adding
-
+    picker.value = ai.activeProvider
     input.placeholder = KEY_PLACEHOLDER[p?.kind] ?? 'sk-…'
-    // لینک AI Studio فقط برای جمینای معنا دارد؛ برای بقیهٔ ارائه‌دهنده‌ها پنل
-    // خودِ سرویس مرجع است.
-    link.hidden = p?.kind !== 'GEMINI'
-    state.textContent = ai.hasKey
-      ? t('A key ending in …{0} is stored.').replace('{0}', ai.keyHint)
-      : t('No key stored.')
-    forget.hidden = !ai.hasKey || adding
-    removeBtn.hidden = !p || p.builtin || adding
+    linkGemini.hidden = p?.kind !== 'GEMINI'
+    linkClaude.hidden = p?.kind !== 'ANTHROPIC'
+    linkOpenAI.hidden = p?.kind !== 'OPEN_AI'
+    state.textContent = ai.hasKey ? t('A key ending in …{0} is stored.').replace('{0}', ai.keyHint) : t('No key stored.')
+    forget.hidden = !ai.hasKey
   }
   onAiChange(sync, box)
   sync()
@@ -393,6 +318,106 @@ function modelSection() {
     free = !free
     sync()
   })
+  onAiChange(sync, box)
+  sync()
+  return box
+}
+
+// ------------------------------------------------- پنل لاگ + تحلیل AI
+
+function aiLogPanel() {
+  const box = section('Connection log')
+  const note = document.createElement('p')
+  note.className = 'ai__note'
+  note.textContent = t('Live log for this session. The AI can read and diagnose it.')
+  box.appendChild(note)
+
+  const actions = document.createElement('div')
+  actions.className = 'ai__keyactions'
+  const reload = document.createElement('button')
+  reload.type = 'button'
+  reload.className = 'btn btn--ghost btn--small'
+  reload.textContent = t('Reload log')
+  const analyse = document.createElement('button')
+  analyse.type = 'button'
+  analyse.className = 'btn btn--primary btn--small'
+  analyse.textContent = t('Ask AI to analyse log')
+  const copy = document.createElement('button')
+  copy.type = 'button'
+  copy.className = 'btn btn--ghost btn--small'
+  copy.textContent = t('Copy logs')
+  actions.append(reload, analyse, copy)
+  box.appendChild(actions)
+
+  const pre = document.createElement('pre')
+  pre.className = 'log ltr ai__log'
+  pre.dir = 'ltr'
+  pre.style.maxHeight = '220px'
+  pre.style.overflow = 'auto'
+  box.appendChild(pre)
+
+  const diagnosis = document.createElement('div')
+  diagnosis.className = 'ai__advisor'
+  diagnosis.hidden = true
+  box.appendChild(diagnosis)
+
+  let lines = []
+
+  const paint = () => {
+    if (!lines.length) {
+      pre.textContent = t('No logs yet. Connect or run a test.')
+      return
+    }
+    const near = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 24
+    pre.textContent = lines.slice(-400).join('\n')
+    if (near) pre.scrollTop = pre.scrollHeight
+  }
+
+  const load = async () => {
+    try { lines = await invoke('read_logs', { limit: 400 }) } catch { lines = [] }
+    paint()
+  }
+
+  reload.addEventListener('click', load)
+  copy.addEventListener('click', async () => {
+    const text = lines.join('\n')
+    try { await navigator.clipboard.writeText(text) } catch {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    toast(t('Logs copied to clipboard'))
+  })
+  analyse.addEventListener('click', async () => {
+    if (!lines.length) { diagnosis.hidden = false; diagnosis.textContent = t('No logs yet. Connect or run a test.'); return }
+    diagnosis.hidden = false
+    diagnosis.textContent = t('Asking the AI…')
+    analyse.disabled = true
+    try {
+      const text = await invoke('ai_analyse_logs', { lang: getLang(), tail: lines.slice(-160).join('\n') })
+      diagnosis.textContent = ''
+      const body = document.createElement('div')
+      body.className = 'aibubble__body'
+      body.dir = 'auto'
+      body.textContent = text
+      diagnosis.appendChild(body)
+    } catch (e) {
+      diagnosis.textContent = String(e)
+    } finally {
+      analyse.disabled = false
+    }
+  })
+
+  // live refresh while visible: same lifecycle as Diagnostics
+  let timer = null
+  box.__onShow = () => { load(); timer ??= setInterval(load, 2000) }
+  box.__onHide = () => { clearInterval(timer); timer = null }
+  // non-tab visibility fallback: load once immediately
+  load()
+  const sync = () => { analyse.disabled = ai.gateCode !== 'READY' || ai.busy }
   onAiChange(sync, box)
   sync()
   return box
@@ -541,7 +566,7 @@ export function renderAssistant() {
   error.className = 'ai__error'
   root.appendChild(error)
 
-  root.append(providerSection(), testSection(), modelSection(), advisorSection(), chatLink())
+  root.append(providerSection(), testSection(), modelSection(), advisorSection(), aiLogPanel(), chatLink())
 
   const sync = () => {
     const message = gateMessage()

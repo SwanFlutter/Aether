@@ -436,6 +436,14 @@ const FA = {
     'تور خودش گره خروجی را انتخاب می‌کند، و برای هر مدار یکی تازه. هیچ تنظیمی آن را به یک کشور محدود نمی‌کند.',
   'The Tor modes need engine core 2.0.0 or newer. The bundled core is older, so they are disabled.':
     'حالت‌های تور به هستهٔ <bdi>2.0.0</bdi> یا بالاتر نیاز دارند. هستهٔ همراه این بیلد قدیمی‌تر است، پس غیرفعال شده‌اند.',
+  'Connection log': 'لاگ اتصال',
+  'Live log for this session. The AI can read and diagnose it.':
+    'لاگ زندهٔ همین نشست. هوش مصنوعی می‌تواند آن را بخواند و عیب‌یابی کند.',
+  'Reload log': 'بارگذاری دوباره',
+  'Ask AI to analyse log': 'تحلیل لاگ با هوش مصنوعی',
+  'Asking the AI…': 'در حال پرسش از هوش مصنوعی…',
+  'Get a key from Anthropic Console': 'کلید را از کنسول آنتروپیک بگیرید',
+  'Get a key from OpenAI Platform': 'کلید را از پلتفرم OpenAI بگیرید',
 
   // وضعیتِ زندهٔ bootstrap — همان `state_tor_*`. درصد را رابط جاگذاری می‌کند.
   'Reaching the Tor network… {0}%': 'در حال رسیدن به شبکهٔ تور… {0}%',

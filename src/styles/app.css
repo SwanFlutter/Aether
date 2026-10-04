@@ -1126,16 +1126,8 @@ html[dir="rtl"] .switch.is-on .switch__knob { transform: translateX(-20px); }
 .ai__probe.is-bad { color: #ff8fa3; }
 
 .ai__models { display: flex; flex-direction: column; gap: 6px; }
-/* فرم «افزودن ارائه‌دهنده»: کارتِ تو‌رفته زیر ردیفِ ارائه‌دهنده‌ها. */
-.ai__providerform {
-  display: flex; flex-direction: column; gap: 10px;
-  margin: 4px 0 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
-  background: color-mix(in srgb, #ffffff 3%, transparent);
-}
-.ai__providerform .field { width: 100%; }
+.ai__providerbox { border-color: color-mix(in srgb, var(--aether-blue, #4C8DFF) 45%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--aether-blue, #4C8DFF) 18%, transparent); }
+.ai__log { font-family: 'Cascadia Mono', Consolas, monospace; font-size: 11px; }
 /* ---------------------------------------------------------------------------
    v1.2.6 — تب «تست شبکه». سه کارتِ نتیجه در یک ردیف که روی پنجره‌های کوچک
    تک‌ستونی می‌شکند، نوار پیشروی فاز، و میله‌های نمونه‌های پینگ.

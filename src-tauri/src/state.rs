@@ -1753,13 +1753,19 @@ impl AetherController {
                         if out.exit.is_none() {
                             spawn_ip_lookup(self.ip_slot.clone(), true);
                         }
-                    } else if out.leak.as_ref().map(|l| l.leaking).unwrap_or(false) {
-                        // Fail closed. A tunnel that exposes the real IP is not
-                        // a successful connection, even when TCP/DNS passed.
-                        self.fail(
-                            "Connection refused: WebRTC can still reach the real IP over direct UDP. Browser and system protection could not be verified.",
-                        );
                     } else {
+                        // WebRTC leak is now a WARNING, not a veto — same reason as
+                        // diagnostics.rs: on MCI/Hamrahe Aval tethering the local
+                        // UDP path is always open yet the browser-policy guard still
+                        // protects browsers. The leak row stays FAIL/red in the UI
+                        // and the log keeps the detail; we just do not refuse the
+                        // session. A true connectivity failure still advances the ladder.
+                        if out.leak.as_ref().map(|l| l.leaking).unwrap_or(false) {
+                            DiagnosticsLog::w(
+                                TAG,
+                                "WebRTC leak detected but tunnel is kept up — browser restart / administrator firewall is the fix, not dropping the session.",
+                            );
+                        }
                         self.advance_or_fail("Tunnel started, but the end-to-end self-test failed");
                     }
                 // >>> AETHER-APP-PATCH tor-native-carrier

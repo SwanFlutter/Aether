@@ -1269,6 +1269,62 @@ impl AiSession {
         }
     }
 
+    /// لاگ را می‌خواند و یک تحلیل کوتاه برمی‌گرداند — برای پنل لاگِ Assistant.
+    ///
+    /// برخلاف `advise` خروجی JSON نمی‌خواهد؛ فقط نثر. پاک‌سازیِ لاگ و تنظیمات
+    /// همان قواعدِ `advise` را دارد (آی‌پی‌ها ماسک، شناسه‌ها حذف، رازها نرفته).
+    pub fn analyse_logs(
+        &self,
+        profile: &ConnectionProfile,
+        lang_code: &str,
+        tail: &str,
+    ) -> Result<String, String> {
+        if tail.trim().is_empty() {
+            return Err("No log to analyse.".into());
+        }
+        let (provider, key, model) = self.begin()?;
+        let port = ai_gate::socks_port_for(profile);
+        let redacted_tail: String = tail
+            .lines()
+            .map(|l| crate::ai_redaction::redact_line(l))
+            .collect::<Vec<_>>()
+            .join("\n");
+        // کلید خودِ کاربر اگر جایی در لاگ مانده بود (کپی‌پیست تنظیمات) پاک شود.
+        let redacted_tail = if key.trim().is_empty() {
+            redacted_tail
+        } else {
+            redacted_tail.replace(key.trim(), "[REDACTED]")
+        };
+        let settings_json = redacted_settings(profile);
+        let turns = [AiTurn {
+            from_user: true,
+            text: ai_prompts::log_analyse_user(&settings_json, &redacted_tail),
+        }];
+        let result = ai_client::generate(
+            &provider,
+            &key,
+            port,
+            &model,
+            &ai_prompts::log_analyse_system(Lang::from_code(lang_code)),
+            &turns,
+            CHAT_TEMPERATURE,
+            900,
+            false,
+        );
+        match result {
+            Ok(text) => {
+                self.inner.lock().unwrap().busy = false;
+                DiagnosticsLog::i("ai", &format!("log analysis: {} chars", text.len()));
+                Ok(text)
+            }
+            Err(error) => {
+                let message = error.message.clone();
+                self.finish(Some(error));
+                Err(message)
+            }
+        }
+    }
+
     /// مشاورِ ضد‌DPI: لاگ را می‌خواند، یک پچ پیشنهاد می‌گیرد، از نگهبان ردش
     /// می‌کند، و پروفایلِ نتیجه را برمی‌گرداند تا فراخوان ذخیره‌اش کند.
     ///

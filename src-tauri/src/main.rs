@@ -663,6 +663,18 @@ fn ai_apply_changes(app: AppHandle, id: u64) -> Result<Vec<(String, String)>, St
     Ok(applied)
 }
 
+/// تحلیل لاگ توسط AI — برای پنل لاگِ تب Assistant.
+#[tauri::command]
+async fn ai_analyse_logs(app: AppHandle, lang: String, tail: String) -> Result<String, String> {
+    let session = ai_handle(&app);
+    let profile = profile_copy(&app);
+    let result = tauri::async_runtime::spawn_blocking(move || session.analyse_logs(&profile, &lang, &tail))
+        .await
+        .map_err(|_| "The request thread stopped unexpectedly.".to_string())?;
+    publish_ai(&app);
+    result
+}
+
 /// مشاورِ ضد‌DPI: لاگ را می‌خواند، پچ می‌گیرد، و اگر چیزی پذیرفته شد ذخیره می‌کند.
 ///
 /// # چرا ذخیره‌کردن اینجاست و نه در `ai_session`
@@ -935,6 +947,7 @@ fn main() {
             ai_delete_messages,
             ai_stop,
             ai_advise,
+            ai_analyse_logs,
             ai_clear_chat,
             ai_dismiss_error,
             ai_dismiss_advisor,

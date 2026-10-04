@@ -150,6 +150,9 @@ const NEW_KEYS = [
   'Show', 'Hide', 'API key saved.', 'API key removed', 'Test the API connection',
   'Testing…', 'Checks the key and lists the models it may use',
   'Working — {0} model(s) available through {1}', 'Not working: {0}',
+  'Connection log', 'Live log for this session. The AI can read and diagnose it.',
+  'Reload log', 'Ask AI to analyse log', 'Asking the AI…',
+  'Get a key from Anthropic Console', 'Get a key from OpenAI Platform',
 ]
 const untranslated = NEW_KEYS.filter((k) => t(k) === k)
 check(untranslated.length === 0, 'هر رشتهٔ تازه ترجمهٔ فارسی دارد' + (untranslated.length ? ` — ${untranslated.join(', ')}` : ''))
@@ -232,14 +235,14 @@ const secByTitle = (title) =>
 const prow = secByTitle('AI provider')
 check(!!prow && !secByTitle('API key'), 'کلید API داخل باکس ارائه‌دهنده است و بخش جدا حذف شده')
 const picker = prow.querySelector('select')
-check(!!picker && picker.options.length === PROVIDERS.length + 1,
-  'انتخابگر هر چهار سرویس + گزینهٔ «افزودن ارائه‌دهندهٔ تازه» را دارد')
+check(!!picker && picker.options.length === PROVIDERS.length,
+  'انتخابگر دقیقاً ارائه‌دهنده‌های موجود را دارد (گزینهٔ «افزودن» حذف شده است)')
 check(picker.value === 'gemini', 'ارائه‌دهندهٔ فعال در انتخابگر مشخص است')
 check([...picker.options].some((o) => o.value === 'claude'), 'Claude در انتخابگر هست')
 check([...picker.options].some((o) => o.textContent.includes(t('no key'))),
   'ارائه‌دهندهٔ بی‌کلید در انتخابگر علامت «بدون کلید» دارد')
-check([...picker.options].at(-1).textContent === t('Add a new provider…'),
-  'گزینهٔ آخرِ انتخابگر «افزودن ارائه‌دهندهٔ تازه» است')
+check(prow.classList.contains('ai__providerbox'), 'باکسِ ارائه‌دهنده حاشیهٔ آبیِ ai__providerbox را دارد')
+check(!prow.querySelector('.ai__providerform'), 'فرمِ «افزودن ارائه‌دهندهٔ تازه» دیگر در کارت نیست')
 check(prow.contains(prow.querySelector('.ai__keyrow')), 'فیلد کلید داخل همین کارت است')
 
 picker.value = 'myprov'
@@ -248,38 +251,13 @@ await tick()
 check(invoked.some(([c, a]) => c === 'ai_set_provider' && a.id === 'myprov'),
   'تغییر انتخابگر، ai_set_provider را می‌فرستد')
 
-// حالت «تازه بساز»: فیلدهای شناسه/نام/قالب/نشانی باز می‌شوند و کلید هم همان‌جا
-// داده می‌شود — یک Save هر دو را ذخیره می‌کند.
-picker.value = '__add__'
-picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-check(!prow.querySelector('.ai__providerform').hidden, 'با «تازه بساز» فیلدهای ارائه‌دهنده باز می‌شوند')
-const formSel = prow.querySelector('.ai__providerform select')
-check(!!formSel && [...formSel.options].map((o) => o.value).join(',') === 'OPEN_AI,ANTHROPIC',
-  'فرم افزودن، نوع API را با مقدارهای درستِ Rust (OPEN_AI / ANTHROPIC) می‌فرستد')
-const [idIn, nameIn, urlIn] = prow.querySelectorAll('.ai__providerform input')
-idIn.value = 'vyce'
-nameIn.value = 'Vyceai'
-urlIn.value = 'https://vyceai.com/v1'
-prow.querySelector('.ai__keyrow input').value = 'sk-TEST2'
-const saveBtn = [...prow.querySelectorAll('.ai__keyactions .btn')].find((b) => b.textContent === t('Save'))
-saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
-await tick(); await tick()
-const upCall = invoked.find(([c]) => c === 'ai_upsert_provider')
-check(!!upCall && upCall[1].kind === 'OPEN_AI' && upCall[1].baseUrl === 'https://vyceai.com/v1',
-  'ذخیره، ai_upsert_provider را با kind=OPEN_AI می‌فرستد (باگ OPENAI برگشت‌ناپذیر شد)')
-check(invoked.filter(([c, a]) => c === 'ai_set_key' && a.key === 'sk-TEST2').length === 1,
-  'همان یک کلیک، کلید را هم با ai_set_key ذخیره کرد')
-check(prow.querySelector('.ai__providerform').hidden, 'پس از ذخیره، فرم دوباره پنهان شد')
-
 // با ارائه‌دهندهٔ فعالِ سازگار با OpenAI: لینک AI Studio باید برود و
-// placeholder باید sk- شود؛ حذفِ ارائه‌دهنده فقط برای غیرپیش‌ساخته‌ها دیده می‌شود.
+// placeholder باید sk- شود؛ فرمِ افزودن و دکمهٔ حذف هر دو رفته‌اند.
 applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'myprov', hasKey: false, keyHint: '' })
 check(prow.querySelector('.ai__link').hidden, 'لینک AI Studio فقط برای جمینای است')
 check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-…', 'placeholder برای ارائه‌دهندهٔ OpenAI-سازگار عوض شد')
-const removeBtn = [...prow.querySelectorAll('.btn--danger')].find((b) => b.textContent === t('Remove provider'))
-check(!!removeBtn && !removeBtn.hidden, 'دکمهٔ حذف برای ارائه‌دهندهٔ سفارشی دیده می‌شود')
-applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'gemini', hasKey: true, keyHint: 'TKEY' })
-check(removeBtn.hidden, 'دکمهٔ حذف روی ارائه‌دهندهٔ پیش‌ساخته پنهان است')
+check(![...prow.querySelectorAll('.btn')].some((b) => b.textContent === t('Remove provider')),
+  'دکمهٔ «حذف ارائه‌دهنده» دیگر وجود ندارد')
 applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'claude', hasKey: false, keyHint: '' })
 check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-ant-…', 'placeholder برای Claude قالب sk-ant- می‌گیرد')
 
@@ -293,6 +271,22 @@ freeBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
 const shown = [...msec.querySelectorAll('.ai__modelname')].map((s) => s.textContent)
 check(shown.length === 1 && shown[0] === 'deepseek-r1:free', 'فیلترِ رایگان فقط مدلِ free را نگه می‌دارد')
 check(t('Free only') !== 'Free only' && t('AI provider') !== 'AI provider', 'رشته‌های تازه ترجمه دارند')
+
+// --------------------------------- ۶) پنل لاگِ زنده + تحلیلِ AI از همان‌جا
+const logSec = secByTitle('Connection log')
+check(!!logSec, 'بخش «Connection log» رندر شده است')
+const logPre = logSec?.querySelector('pre.ai__log')
+check(!!logPre && logPre.getAttribute('dir') === 'ltr', 'لاگِ زنده در <pre>ی با کلاسِ ai__log و dir=ltr است')
+check(!!logPre && logPre.textContent === t('No logs yet. Connect or run a test.'),
+  'بی‌لاگ، پیامِ راهنما دیده می‌شود (read_logs خالی)')
+const analyseBtn = [...logSec?.querySelectorAll('.btn') ?? []].find((b) => b.textContent === t('Ask AI to analyse log'))
+check(!!analyseBtn, 'دکمهٔ «تحلیلِ لاگ با AI» هست')
+applyAiSnapshot({ ...ai, gateCode: 'NO_KEY', busy: false })
+check(analyseBtn.disabled === true, 'دکمهٔ تحلیل تا آماده‌بودنِ کلید غیرفعال است')
+applyAiSnapshot({ ...ai, gateCode: 'READY', busy: false })
+check(analyseBtn.disabled === false, 'با کلیدِ آماده، دکمهٔ تحلیل فعال می‌شود')
+const reloadBtn = [...logSec?.querySelectorAll('.btn') ?? []].find((b) => b.textContent === t('Reload log'))
+check(!!reloadBtn, 'دکمهٔ بارگذاری دوبارهٔ لاگ هست')
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL OK')
 process.exit(failures ? 1 : 0)

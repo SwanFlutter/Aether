@@ -232,6 +232,20 @@ when the log shows a healthy connection.\n\
     )
 }
 
+pub fn log_analyse_system(lang: Lang) -> String {
+    format!(
+        "{}\n\nYou are diagnosing a VPN connection log. The log is redacted (IPs masked). \
+Explain in at most 200 words: what phase failed or is slow, the likely censorship / network cause on this provider, \
+and 2-4 concrete settings the user can try (protocol, scanMode, noize, mtu, exitRegion, fragment, etc.). \
+If the log looks healthy, say so and do not invent fixes.",
+        base_rules(lang)
+    )
+}
+
+pub fn log_analyse_user(settings_json: &str, redacted_log: &str) -> String {
+    format!("Current settings:\n{settings_json}\n\nLog tail (redacted, oldest first):\n{redacted_log}")
+}
+
 /// پرسشِ مشاور: تنظیمات فعلی + خلاصهٔ پاک‌شدهٔ لاگ.
 pub fn advisor_user(settings_json: &str, redacted_log: &str) -> String {
     format!(

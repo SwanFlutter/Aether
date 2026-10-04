@@ -562,10 +562,15 @@ pub fn self_test(grace_ms: u64) -> SelfTestOutcome {
         );
     }
 
-    // Never report CONNECTED when the leak check failed. The previous build
-    // only painted the warning red while still declaring the tunnel healthy.
-    // That was the most dangerous part of the bug.
-    let ok = ok && !leak.leaking;
+    // MCI / Hamrahe Aval fix: WebRTC direct-UDP leak must NOT block the
+    // tunnel. On mobile tethering the local UDP path is always open, but the
+    // browser-policy layer (LeakGuard) still protects newly-started browsers.
+    // A fail-closed self-test meant zero users on that network could connect
+    // (screenshot: "Browser and system protection could not be verified").
+    // We keep the leak report (PASS/FAIL + detail) for the UI badge but
+    // never let it veto CONNECTED — it is a warning, actionable by
+    // "restart the browser / run as administrator", not a session failure.
+    let ok = ok;
     SelfTestOutcome {
         ok,
         exit,
