@@ -83,8 +83,10 @@ jobs:
           Get-ChildItem dist-engine | Format-Table Name, Length
 
       # بدون bundle: فقط خودِ اجرایی؛ بسته‌بندی را Inno و پرتابل می‌سازند.
+      # (پرچمِ درست `--no-bundle` است؛ نه `--no-app` و نه `--bundles none` —
+      #  هر دوی آن‌ها توسط CLI رد می‌شوند.)
       - name: Build app (no bundle)
-        run: npx tauri build --bundles none --target ${{ matrix.rust }}
+        run: npx tauri build --no-bundle --target ${{ matrix.rust }}
 
       # همان قاعدهٔ محلی: مانیفستِ requireAdministrator با mt.exe پس از لینک نهایی
       # در EXE خوابیده می‌شود (scripts/embed-manifest.ps1).

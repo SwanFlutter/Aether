@@ -12,7 +12,7 @@ $out     = Join-Path $root "dist/payload-$Arch"
 
 # پیدا کردن اجرایی برنامه.
 #
-# مهم: وقتی Tauri را با `--bundles none` می‌سازیم، نام خروجی همان نام
+# مهم: وقتی Tauri را با `--no-bundle` می‌سازیم، نام خروجی همان نام
 # کریت در Cargo.toml است (aether-desktop.exe) نه productName (Aether.exe).
 # قبلاً مستقیم Aether.exe را می‌خواستیم — یعنی یک خطای حتمی در مراحل بعد.
 # حالا هر دو نام را می‌پذیریم و خروجی را به Aether.exe تغییر نام می‌دهیم.
