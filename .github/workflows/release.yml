@@ -1,7 +1,15 @@
 name: release
 
-# ریلیزِ Aether Desktop: فقط با تگ `v*` شروع می‌شود تا هیچ بیلدی بی‌دلیل
-# سهمیهٔ دقیقه را نخورد. خروجی: نصب‌کنندهٔ NSIS برای x64 + چک‌سام.
+# ریلیزِ Aether Desktop — دقیقاً همان خروجی‌هایی که در README وعده داده شده‌اند:
+#   Aether-Setup-<ver>-x64.exe      Inno Setup, ویندوز ۶۴بیتی
+#   Aether-Setup-<ver>-x86.exe      Inno Setup, ویندوز ۳۲بیتی
+#   Aether-Portable-<ver>-x64.zip   پرتابل، بدون نصب
+#   Aether-Portable-<ver>-x86.zip   پرتابل، بدون نصب
+#   SHA256SUMS.txt                  چک‌سام برای هر چهار فایل
+#
+# فقط با تگ `v*` شروع می‌شود تا هیچ بیلدی بی‌دلیل سهمیهٔ دقیقه را نخورد.
+# انتشار با اسکریپتِ خودِ مخزن (scripts/publish-release-local.sh) — idempotent:
+# اگر ریلیزِ تگ از پیش ساخته شده باشد، فایل‌ها با --clobber جایگزین می‌شوند.
 on:
   push:
     tags:
@@ -11,9 +19,19 @@ permissions:
   contents: write
 
 jobs:
-  build-x64:
-    name: Build Windows x64
+  build:
+    name: Build Windows ${{ matrix.arch }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            rust: x86_64-pc-windows-msvc
+            wintunDir: bin/amd64
+          - arch: x86
+            rust: i686-pc-windows-msvc
+            wintunDir: bin/x86
     defaults:
       run:
         shell: pwsh
@@ -29,6 +47,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust }}
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -41,18 +61,18 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      # مرحلهٔ ۲ زنجیره: psiphon-tunnel-core.exe از سورسِ تگ‌خوردهٔ بالادست
-      # (همان سیاست scripts/build-psiphon.ps1 — باینری شخص‌سوم دانلود نمی‌شود).
-      - name: Build psiphon-tunnel-core (x64)
-        run: pwsh -NoProfile scripts/build-psiphon.ps1 -Arch x64
+      # استیج ۲ زنجیره: psiphon-tunnel-core.exe از سورسِ تگ‌خوردهٔ بالادست
+      # (scripts/build-psiphon.ps1 — باینری شخص‌سوم دانلود نمی‌شود).
+      - name: Build psiphon-tunnel-core
+        run: pwsh -NoProfile scripts/build-psiphon.ps1 -Arch ${{ matrix.arch }}
 
-      # درایور Wintun از سایت رسمی، با پینِ چک‌سام (scripts/fetch-wintun.ps1).
+      # درایور Wintun از سایتِ رسمی، با پینِ چک‌سام (scripts/fetch-wintun.ps1).
       - name: Fetch wintun.dll
-        run: pwsh -NoProfile scripts/fetch-wintun.ps1 -ArchDir bin/amd64
+        run: pwsh -NoProfile scripts/fetch-wintun.ps1 -ArchDir ${{ matrix.wintunDir }}
 
-      # مرحلهٔ ۱ زنجیره: هستهٔ aether از سورسِ داخلِ همین مخزن (scripts/build-engine.ps1).
+      # استیج ۱ زنجیره: هستهٔ aether از سورسِ داخلِ همین مخزن (scripts/build-engine.ps1).
       - name: Build aether engine
-        run: pwsh -NoProfile scripts/build-engine.ps1 -Target x86_64-pc-windows-msvc
+        run: pwsh -NoProfile scripts/build-engine.ps1 -Target ${{ matrix.rust }}
 
       # دروازهٔ کوچک: اگر هر پنج فایل نیست، بیلد همین‌جا می‌شکند، نه وسطِ bundle.
       - name: Verify dist-engine is complete
@@ -62,59 +82,72 @@ jobs:
           if ($missing) { throw "dist-engine incomplete: $($missing -join ', ')" }
           Get-ChildItem dist-engine | Format-Table Name, Length
 
-      - name: Build app (NSIS)
-        run: npm run tauri build
+      # بدون bundle: فقط خودِ اجرایی؛ بسته‌بندی را Inno و پرتابل می‌سازند.
+      - name: Build app (no bundle)
+        run: npx tauri build --bundles none --target ${{ matrix.rust }}
 
       # همان قاعدهٔ محلی: مانیفستِ requireAdministrator با mt.exe پس از لینک نهایی
-      # در EXE خوابیده می‌شود (scripts/embed-manifest.ps1) و با --no-app دوباره
-      # بسته‌بندی می‌شود تا نصب‌کننده EXEٔ همان را بگیرد.
+      # در EXE خوابیده می‌شود (scripts/embed-manifest.ps1).
       - name: Embed UAC manifest
-        run: pwsh -NoProfile scripts/embed-manifest.ps1 -ExePath src-tauri/target/release/aether-desktop.exe
+        run: pwsh -NoProfile scripts/embed-manifest.ps1 -ExePath "src-tauri/target/${{ matrix.rust }}/release/aether-desktop.exe"
 
-      - name: Re-bundle with manifest-embedded exe
-        run: npx tauri build --no-app
+      - name: Stage payload
+        run: pwsh -NoProfile scripts/stage-payload.ps1 -Target ${{ matrix.rust }} -Arch ${{ matrix.arch }}
 
-      - name: Collect release artifacts
+      - name: Inno Setup
+        uses: MinhaoWang/iscc@v0.9.0
+
+      - name: Compile installer
         run: |
           $ver = ((Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version)
-          $nsis = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
-          if (-not $nsis) { throw 'NSIS installer was not produced' }
-          Copy-Item $nsis.FullName "Aether-Setup-$ver-x64.exe"
-          $h = (Get-FileHash "Aether-Setup-$ver-x64.exe" -Algorithm SHA256).Hash.ToLower()
-          Set-Content -Path SHA256SUMS.txt -Value "$h  Aether-Setup-$ver-x64.exe"
-          Get-Content SHA256SUMS.txt
+          iscc /DMyyAppVersion="$ver" /DMyArch="${{ matrix.arch }}" /DPayloadDir="dist\payload-${{ matrix.arch }}" /DOutputDir="dist" installer\aether.iss
+          if ($LASTEXITCODE -ne 0) { throw 'iscc failed' }
+
+      - name: Build portable
+        run: |
+          $ver = ((Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version)
+          pwsh -NoProfile scripts/make-portable.ps1 -Arch ${{ matrix.arch }} -Version $ver
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aether-x64
+          name: aether-${{ matrix.arch }}
           path: |
-            Aether-Setup-*.exe
-            SHA256SUMS.txt
+            dist/Aether-Setup-*-${{ matrix.arch }}.exe
+            dist/Aether-Portable-*-${{ matrix.arch }}.zip
           if-no-files-found: error
 
   release:
     name: Publish release
-    needs: build-x64
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
+          merge-multiple: true
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: |
-            dist/Aether-Setup-*.exe
-            dist/SHA256SUMS.txt
-          body_file: .github/release-notes.md
+      # همان اسکریپتِ انتشارِ محلی: چک‌سام + انتشارِ idempotent با gh
+      # (اگر ریلیزِ تگ از قبل ساخته شده باشد، فایل‌ها --clobber می‌شوند).
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-release-local.sh dist --tag "${GITHUB_REF_NAME}"
+
+      # اگر ریلیزیِ پیش از این فایلِ اضافی (مثلاً «(1)» پسوند) گذاشته باشد،
+      # فقط چهار فایلِ موجه + چک‌سام بماند.
+      - name: Remove stray duplicate assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '.[] | select(.tag_name == "'"${GITHUB_REF_NAME}"'") | .assets[] | select(.name | test("\\(")) | .id' \
+            | while read -r id; do
+                [ -n "$id" ] && gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
+              done
