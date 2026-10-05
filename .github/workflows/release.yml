@@ -104,10 +104,13 @@ jobs:
           Start-Process -FilePath .\innosetup-setup.exe -ArgumentList '/silent', '/suppressmsgboxes', '/norestart' -Wait
           if (-not (Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) { throw 'ISCC.exe was not installed' }
 
+      # مسیرهای نِسبتیِ ISCC بر مبنایِ *فایلِ .iss* خوانده می‌شوند (پوشهٔ
+      # installer/)، پس باید با ..\ به ریشهٔ مخزن برگردیم وگرنه جستجو در
+      # installer\dist می‌رود و «No files found» می‌گیرد.
       - name: Compile installer
         run: |
           $ver = ((Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version)
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DMyyAppVersion=$ver" "/DMyArch=${{ matrix.arch }}" "/DPayloadDir=dist\payload-${{ matrix.arch }}" "/DOutputDir=dist" installer\aether.iss
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DMyAppVersion=$ver" "/DMyArch=${{ matrix.arch }}" "/DPayloadDir=..\dist\payload-${{ matrix.arch }}" "/DOutputDir=..\dist" installer\aether.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
       - name: Build portable
