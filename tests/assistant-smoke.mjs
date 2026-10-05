@@ -235,14 +235,15 @@ const secByTitle = (title) =>
 const prow = secByTitle('AI provider')
 check(!!prow && !secByTitle('API key'), 'کلید API داخل باکس ارائه‌دهنده است و بخش جدا حذف شده')
 const picker = prow.querySelector('select')
-check(!!picker && picker.options.length === PROVIDERS.length,
-  'انتخابگر دقیقاً ارائه‌دهنده‌های موجود را دارد (گزینهٔ «افزودن» حذف شده است)')
+check(!!picker && picker.options.length === PROVIDERS.length + 1,
+  'انتخابگر ارائه‌دهنده‌های موجود + گزینهٔ «افزودن ارائه‌دهندهٔ تازه» را دارد')
 check(picker.value === 'gemini', 'ارائه‌دهندهٔ فعال در انتخابگر مشخص است')
 check([...picker.options].some((o) => o.value === 'claude'), 'Claude در انتخابگر هست')
 check([...picker.options].some((o) => o.textContent.includes(t('no key'))),
   'ارائه‌دهندهٔ بی‌کلید در انتخابگر علامت «بدون کلید» دارد')
 check(prow.classList.contains('ai__providerbox'), 'باکسِ ارائه‌دهنده حاشیهٔ آبیِ ai__providerbox را دارد')
-check(!prow.querySelector('.ai__providerform'), 'فرمِ «افزودن ارائه‌دهندهٔ تازه» دیگر در کارت نیست')
+const pform = prow.querySelector('.ai__providerform')
+check(!!pform && pform.hidden, 'فرمِ «افزودن ارائه‌دهندهٔ تازه» هست و پیش‌فرض پنهان است')
 check(prow.contains(prow.querySelector('.ai__keyrow')), 'فیلد کلید داخل همین کارت است')
 
 picker.value = 'myprov'
@@ -252,14 +253,34 @@ check(invoked.some(([c, a]) => c === 'ai_set_provider' && a.id === 'myprov'),
   'تغییر انتخابگر، ai_set_provider را می‌فرستد')
 
 // با ارائه‌دهندهٔ فعالِ سازگار با OpenAI: لینک AI Studio باید برود و
-// placeholder باید sk- شود؛ فرمِ افزودن و دکمهٔ حذف هر دو رفته‌اند.
+// placeholder باید sk- شود؛ دکمهٔ «حذف ارائه‌دهنده» فقط برای ارائه‌دهندهٔ
+// کاربری (غیرپیش‌ساخته) دیده می‌شود.
 applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'myprov', hasKey: false, keyHint: '' })
 check(prow.querySelector('.ai__link').hidden, 'لینک AI Studio فقط برای جمینای است')
 check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-…', 'placeholder برای ارائه‌دهندهٔ OpenAI-سازگار عوض شد')
-check(![...prow.querySelectorAll('.btn')].some((b) => b.textContent === t('Remove provider')),
-  'دکمهٔ «حذف ارائه‌دهنده» دیگر وجود ندارد')
+const rmBtn = [...prow.querySelectorAll('.btn')].find((b) => b.textContent === t('Remove provider'))
+check(!!rmBtn && !rmBtn.hidden, 'دکمهٔ «حذف ارائه‌دهنده» برای ارائه‌دهندهٔ کاربری پیداست')
 applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'claude', hasKey: false, keyHint: '' })
 check(prow.querySelector('.ai__keyrow input').placeholder === 'sk-ant-…', 'placeholder برای Claude قالب sk-ant- می‌گیرد')
+check([...prow.querySelectorAll('.btn')].find((b) => b.textContent === t('Remove provider')).hidden,
+  'دکمهٔ حذف روی ارائه‌دهندهٔ پیش‌ساخته پنهان است')
+
+// حالت «افزودن ارائه‌دهندهٔ تازه»: فرم باز می‌شود، Save هم ارائه‌دهنده را
+// upsert می‌کند و هم کلیدِ همان فرم را با یک کلیک ذخیره می‌کند.
+picker.value = '__add__'
+picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+check(!pform.hidden, 'با انتخاب «افزودن ارائه‌دهندهٔ تازه» فرم باز شد')
+const formSel = [...pform.querySelectorAll('select')].map((s) => [...s.options].map((o) => o.value).join(','))
+check(formSel.join('|') === 'OPEN_AI,ANTHROPIC', 'قالب‌های فرم: سازگار با OpenAI و آنتروپیک')
+const [fi, fn, fu] = [...pform.querySelectorAll('input')]
+fi.value = 'vyceai'; fn.value = 'VyceAI'; fu.value = 'https://vyceai.com/v1'
+prow.querySelector('.ai__keyrow input').value = 'sk-TEST2'
+prow.querySelector('.ai__keyactions .btn--primary').click()
+await tick()
+check(invoked.some(([c, a]) => c === 'ai_upsert_provider' && a.kind === 'OPEN_AI' && a.baseUrl === 'https://vyceai.com/v1'),
+  'Save، ارائه‌دهندهٔ تازه را با kind درست ثبت کرد')
+check(invoked.filter(([c]) => c === 'ai_set_key').length >= 1, 'Save همان کلید را هم با ai_set_key ذخیره کرد')
+check(pform.hidden, 'پس از ذخیره، فرم دوباره پنهان شد')
 
 applyAiSnapshot({ ...ai, providers: PROVIDERS, activeProvider: 'myprov', hasKey: false, keyHint: '',
   models: [model('gpt-4o-mini', false), model('deepseek-r1:free', true)], selectedModel: 'gpt-4o-mini' })

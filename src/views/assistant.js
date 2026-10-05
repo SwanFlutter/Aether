@@ -7,7 +7,7 @@
 //  است: بی‌کلید مدلی نیست، بی‌مدل مشاور و چتی نیست. صفحه‌ای که هر چهار را همیشه
 //  نشان بدهد، سه بخشِ مرده به کاربرِ تازه نشان می‌دهد.
 
-import { ai, onAiChange, gateMessage, probeSummary, setApiKey, selectModel, refreshModels, testKey, runAdvisor, dismissAdvisor, setProvider } from '../ai.js'
+import { ai, onAiChange, gateMessage, probeSummary, setApiKey, selectModel, refreshModels, testKey, runAdvisor, dismissAdvisor, setProvider, upsertProvider, removeProvider } from '../ai.js'
 import { goToTab } from '../ui/nav.js'
 import { t, getLang } from '../i18n.js'
 import { toast } from '../ui/toast.js'
@@ -43,9 +43,14 @@ const KEY_PLACEHOLDER = { GEMINI: 'AIza…', OPEN_AI: 'sk-…', ANTHROPIC: 'sk-a
 // استانداردِ SCREAMING_SNAKE-case خودِ variant است؛ همان «OPENAI» بود که خطای
 // ناشناخته‌بودنِ variant را می‌ساخت (alias سمت Rust دیگر جلویض را می‌گیرد،
 // ولی رابط باید شکلِ درست را بفرستد).
+const KIND_OPTIONS = [
+  ['OPEN_AI', 'OpenAI-compatible'],
+  ['ANTHROPIC', 'Anthropic (Claude)'],
+]
 
-
-
+// مقدارِ ویژهٔ انتخابگر — «ارائه‌دهندهٔ تازه بساز». یک شناسهٔ دوتیره می‌خورد،
+// چون شناسهٔ ارائه‌دهنده‌ها به `[a-z0-9_-]` محدودند و Rust آن را رد می‌کند.
+const ADD_ID = '__add__'
 
 function selectField(capText, options) {
   const wrap = document.createElement('label')
@@ -73,6 +78,37 @@ function providerSection() {
   const pickerWrap = selectField('Provider', [])
   const picker = pickerWrap.querySelector('select')
   box.appendChild(pickerWrap)
+
+  // ---- فیلدهای ساخت ارائه‌دهندهٔ تازه (سازگار با OpenAI / آنتروپیک)؛
+  // فقط در حالت «افزودن ارائه‌دهندهٔ تازه» دیده می‌شوند.
+  const details = document.createElement('div')
+  details.className = 'ai__providerform'
+  details.hidden = true
+  const formInputs = []
+  const field = (label, placeholder) => {
+    const wrap = document.createElement('label')
+    wrap.className = 'field'
+    const cap = document.createElement('span')
+    cap.className = 'field__label'
+    cap.textContent = t(label)
+    const el = document.createElement('input')
+    el.className = 'input ltr'
+    el.placeholder = placeholder
+    el.type = 'text'
+    el.autocomplete = 'off'
+    wrap.append(cap, el)
+    formInputs.push(el)
+    return wrap
+  }
+  const fId = field('Provider ID', 'myprovider')
+  const fName = field('Display name', 'My AI Provider')
+  const fKind = selectField('API format', KIND_OPTIONS)
+  const fUrl = field('Base URL', 'https://api.example.com/v1')
+  const formHint = document.createElement('p')
+  formHint.className = 'ai__note'
+  formHint.textContent = t('Lowercase letters, numbers, hyphens or underscores. Address must be https://. The key is optional if you manage auth via headers.')
+  details.append(fId, fName, fKind, fUrl, formHint)
+  box.appendChild(details)
 
   const keyNote = document.createElement('p')
   keyNote.className = 'ai__note'
@@ -113,7 +149,11 @@ function providerSection() {
   forget.type = 'button'
   forget.className = 'btn btn--ghost btn--small btn--danger'
   forget.textContent = t('Forget')
-  actions.append(save, forget)
+  const removeBtn = document.createElement('button')
+  removeBtn.type = 'button'
+  removeBtn.className = 'btn btn--ghost btn--small btn--danger'
+  removeBtn.textContent = t('Remove provider')
+  actions.append(save, forget, removeBtn)
   box.appendChild(actions)
 
   const state = document.createElement('p')
@@ -144,7 +184,16 @@ function providerSection() {
   linkOpenAI.textContent = t('Get a key from OpenAI Platform')
   box.appendChild(linkOpenAI)
 
+  let adding = false
+
   picker.addEventListener('change', () => {
+    if (picker.value === ADD_ID) {
+      adding = true
+      details.hidden = false
+      return
+    }
+    adding = false
+    details.hidden = true
     setProvider(picker.value).catch(() => {})
   })
 
@@ -152,18 +201,34 @@ function providerSection() {
     const key = input.value.trim()
     save.disabled = true
     try {
+      if (adding) {
+        const [id, name, url] = formInputs.map((i) => i.value.trim())
+        const kind = fKind.querySelector('select').value
+        if (!id || !url) {
+          formHint.textContent = t('Provider ID and Base URL are required.')
+          return
+        }
+        // upsert سمت Rust ارائه‌دهندهٔ تازه را فعال هم می‌کند، پس همین
+        // فیلدِ کلید زیرِ فرم مستقیم مالِ همان ارائه‌دهندهٔ تازه می‌شود.
+        await upsertProvider(id, name, kind, url)
+        formInputs.forEach((i) => { i.value = '' })
+        adding = false
+        details.hidden = true
+        toast(t('Provider saved.'))
+      }
       if (key) {
         await setApiKey(key)
         input.value = ''
         input.type = 'password'
         paintReveal()
         toast(t('API key saved.'))
-      } else {
+      } else if (!adding) {
         state.textContent = t('No key typed — nothing was changed.')
+        return
       }
       if (ai.gateCode === 'NO_MODEL' || ai.gateCode === 'READY') await refreshModels()
     } catch (e) {
-      state.textContent = String(e)
+      (adding ? formHint : state).textContent = String(e)
     } finally {
       save.disabled = false
     }
@@ -173,11 +238,16 @@ function providerSection() {
     input.value = ''
     toast(t('API key removed'))
   })
+  removeBtn.addEventListener('click', () => {
+    const p = activeProvider()
+    if (!p || p.builtin) return
+    removeProvider(p.id).then(() => toast(t('Provider removed.'))).catch(() => {})
+  })
 
   let pickerSignature = ''
   const sync = () => {
     const p = activeProvider()
-    const sig = `${ai.activeProvider}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
+    const sig = `${ai.activeProvider}|${adding ? ADD_ID : ''}|${ai.providers.map((x) => `${x.id}${x.displayName}${x.hasKey ? 1 : 0}`).join(',')}`
     if (sig !== pickerSignature) {
       pickerSignature = sig
       picker.replaceChildren()
@@ -187,14 +257,20 @@ function providerSection() {
         opt.textContent = prov.hasKey ? prov.displayName : `${prov.displayName} — ${t('no key')}`
         picker.appendChild(opt)
       }
+      const add = document.createElement('option')
+      add.value = ADD_ID
+      add.textContent = t('Add a new provider…')
+      picker.appendChild(add)
     }
-    picker.value = ai.activeProvider
-    input.placeholder = KEY_PLACEHOLDER[p?.kind] ?? 'sk-…'
-    linkGemini.hidden = p?.kind !== 'GEMINI'
-    linkClaude.hidden = p?.kind !== 'ANTHROPIC'
-    linkOpenAI.hidden = p?.kind !== 'OPEN_AI'
+    picker.value = adding ? ADD_ID : ai.activeProvider
+    details.hidden = !adding
+    input.placeholder = adding ? (KEY_PLACEHOLDER[fKind.querySelector('select').value] ?? 'sk-…') : (KEY_PLACEHOLDER[p?.kind] ?? 'sk-…')
+    linkGemini.hidden = adding || p?.kind !== 'GEMINI'
+    linkClaude.hidden = adding || p?.kind !== 'ANTHROPIC'
+    linkOpenAI.hidden = adding || p?.kind !== 'OPEN_AI'
     state.textContent = ai.hasKey ? t('A key ending in …{0} is stored.').replace('{0}', ai.keyHint) : t('No key stored.')
-    forget.hidden = !ai.hasKey
+    forget.hidden = !ai.hasKey || adding
+    removeBtn.hidden = !p || p.builtin || adding
   }
   onAiChange(sync, box)
   sync()
@@ -230,7 +306,10 @@ function testSection() {
     summary.textContent = probeSummary()
     summary.classList.toggle('is-ok', ai.probe?.state === 'OK')
     summary.classList.toggle('is-bad', ai.probe?.state === 'FAILED')
-    run.disabled = !ai.hasKey || ai.busy
+    // بی‌تونل، تست فقط خطای SOCKS می‌دهد (ترافیک AI مجبوراً از تونل می‌رود)؛
+    // پیش از این کاربرِ متصل‌نشده همان «این خطا داد» را می‌دید.
+    const netDown = ai.gateCode === 'DISCONNECTED' || ai.gateCode === 'WRONG_MODE'
+    run.disabled = !ai.hasKey || ai.busy || netDown
   }
   onAiChange(sync, box)
   sync()
